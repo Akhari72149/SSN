@@ -1,0 +1,15 @@
+CREATE EXTENSION IF NOT EXISTS pgcrypto;
+CREATE TYPE event_status AS ENUM ('draft','open','closed','archived');
+CREATE TYPE attendance_event_kind AS ENUM ('sign_on','sign_off','correction');
+CREATE TYPE sync_operation_state AS ENUM ('pending','accepted','conflict','rejected','expired');
+CREATE TABLE events (id uuid PRIMARY KEY DEFAULT gen_random_uuid(),name text NOT NULL,timezone text NOT NULL DEFAULT 'Europe/London',status event_status NOT NULL DEFAULT 'draft',starts_at timestamptz NOT NULL,ends_at timestamptz NOT NULL,created_at timestamptz NOT NULL DEFAULT now(),CHECK(ends_at>starts_at));
+CREATE TABLE staff (id uuid PRIMARY KEY DEFAULT gen_random_uuid(),display_name text NOT NULL,role_label text,active boolean NOT NULL DEFAULT true,row_version integer NOT NULL DEFAULT 1,created_at timestamptz NOT NULL DEFAULT now(),updated_at timestamptz NOT NULL DEFAULT now(),CHECK(row_version>0));
+CREATE TABLE shifts (id uuid PRIMARY KEY DEFAULT gen_random_uuid(),event_id uuid NOT NULL REFERENCES events(id),name text NOT NULL,starts_at timestamptz NOT NULL,ends_at timestamptz NOT NULL,CHECK(ends_at>starts_at));
+CREATE TABLE shift_assignments (id uuid PRIMARY KEY DEFAULT gen_random_uuid(),shift_id uuid NOT NULL REFERENCES shifts(id),staff_id uuid NOT NULL REFERENCES staff(id),cancelled_at timestamptz,row_version integer NOT NULL DEFAULT 1,CHECK(row_version>0));
+CREATE UNIQUE INDEX shift_assignment_once ON shift_assignments(shift_id,staff_id);
+CREATE TABLE attendance_events (id uuid PRIMARY KEY DEFAULT gen_random_uuid(),event_id uuid NOT NULL REFERENCES events(id),assignment_id uuid REFERENCES shift_assignments(id),staff_id uuid NOT NULL REFERENCES staff(id),kind attendance_event_kind NOT NULL,occurred_at timestamptz NOT NULL,recorded_at timestamptz NOT NULL DEFAULT now(),actor_user_id uuid NOT NULL,correction_of_id uuid REFERENCES attendance_events(id),correction_reason text,CHECK((kind='correction')=(correction_of_id IS NOT NULL AND correction_reason IS NOT NULL)));
+CREATE INDEX attendance_event_staff_time ON attendance_events(event_id,staff_id,occurred_at DESC);
+CREATE TABLE audit_events (id uuid PRIMARY KEY DEFAULT gen_random_uuid(),actor_user_id uuid,action text NOT NULL,target_type text NOT NULL,target_opaque_id uuid,permitted boolean NOT NULL,request_id uuid NOT NULL,reason text,metadata jsonb NOT NULL DEFAULT '{}'::jsonb,occurred_at timestamptz NOT NULL DEFAULT now());
+CREATE INDEX audit_event_time ON audit_events(occurred_at DESC);
+CREATE TABLE sync_operations (id uuid PRIMARY KEY,device_id uuid NOT NULL,event_id uuid NOT NULL REFERENCES events(id),operation_type text NOT NULL,payload jsonb NOT NULL,expected_version integer,state sync_operation_state NOT NULL DEFAULT 'pending',created_at timestamptz NOT NULL,processed_at timestamptz);
+CREATE INDEX sync_operation_queue ON sync_operations(device_id,state,created_at);
