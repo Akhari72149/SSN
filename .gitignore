@@ -9,3 +9,8 @@ Thumbs.db
 
 # Local logs
 *.log
+
+# Private planning and architecture documents kept at the repository root.
+# Keep the public project README tracked.
+/*.md
+!/README.md
