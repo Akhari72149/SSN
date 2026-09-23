@@ -1,4 +1,5 @@
 allowBuilds:
-  esbuild: set this to true or false
-  sharp: set this to true or false
-  workerd: set this to true or false
+  # Required native build steps for packages pinned in pnpm-lock.yaml.
+  esbuild: true
+  sharp: true
+  workerd: true
