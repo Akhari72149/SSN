@@ -5,6 +5,7 @@ import test from "node:test";
 const migrationUrl = new URL("../drizzle/0001_secure_foundation.sql", import.meta.url);
 const authMigrationUrl = new URL("../drizzle/0002_authentication_runtime.sql", import.meta.url);
 const usernameMigrationUrl = new URL("../drizzle/0003_username_authentication.sql", import.meta.url);
+const firstLoginMigrationUrl = new URL("../drizzle/0004_first_login_accounts.sql", import.meta.url);
 
 test("secure foundation migration contains the agreed operational domains", async () => {
   const sql = await readFile(migrationUrl, "utf8");
@@ -46,6 +47,13 @@ test("username authentication migration safely backfills existing accounts", asy
   assert.match(sql, /UPDATE "user_accounts" SET "username"/i);
   assert.match(sql, /ALTER COLUMN "username" SET NOT NULL/i);
   assert.match(sql, /user_account_username_unique/i);
+});
+
+test("new accounts must replace temporary passwords without changing existing accounts", async () => {
+  const sql = await readFile(firstLoginMigrationUrl, "utf8");
+  assert.match(sql, /auth_challenge_purpose/i);
+  assert.match(sql, /must_change_password" boolean DEFAULT false NOT NULL/i);
+  assert.match(sql, /must_change_password" SET DEFAULT true/i);
 });
 
 test("database access remains server-side and health failures do not leak details", async () => {

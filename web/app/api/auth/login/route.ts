@@ -8,12 +8,15 @@ import { writeAudit } from "@/lib/audit";
 import {
   LOCKOUT_DURATION_MS,
   MAX_PASSWORD_FAILURES,
+  FIRST_LOGIN_COOKIE,
+  FIRST_LOGIN_DURATION_MS,
   MFA_CHALLENGE_COOKIE,
   MFA_CHALLENGE_DURATION_MS,
   isLiveMode,
   secureCookies,
 } from "@/lib/auth/config";
 import { hashToken, randomToken, verifyPassword } from "@/lib/auth/crypto";
+import { isValidUsername, normalizeUsername } from "@/lib/auth/username";
 
 export const runtime = "nodejs";
 
@@ -34,12 +37,12 @@ export async function POST(request: NextRequest) {
     return genericFailure(400);
   }
   const username = typeof (body as { username?: unknown }).username === "string"
-    ? (body as { username: string }).username.trim().toLowerCase()
+    ? normalizeUsername((body as { username: string }).username)
     : "";
   const password = typeof (body as { password?: unknown }).password === "string"
     ? (body as { password: string }).password
     : "";
-  if (!/^[a-z][a-z0-9._-]{2,49}$/.test(username) || !password || password.length > 256) return genericFailure();
+  if (!isValidUsername(username) || !password || password.length > 256) return genericFailure();
 
   const db = getDb();
   const [account] = await db
@@ -54,7 +57,7 @@ export async function POST(request: NextRequest) {
     return genericFailure();
   }
 
-  if (account.status !== "active" || (account.lockedUntil && account.lockedUntil > now) || !account.passwordHash) {
+  if ((account.status !== "active" && account.status !== "invited") || (account.lockedUntil && account.lockedUntil > now) || !account.passwordHash) {
     await verifyPassword(password, DUMMY_PASSWORD_HASH);
     await writeAudit({
       actorUserId: account.id,
@@ -90,7 +93,13 @@ export async function POST(request: NextRequest) {
     return genericFailure(failures >= MAX_PASSWORD_FAILURES ? 429 : 401);
   }
 
-  if (!account.mfaEnrolledAt) {
+  if (account.mustChangePassword || !account.mfaEnrolledAt) {
+    await db.update(userAccounts).set({ failedSignInCount: 0, lockedUntil: null, updatedAt: now }).where(eq(userAccounts.id, account.id));
+    const challengeToken = randomToken();
+    const expiresAt = new Date(now.getTime() + FIRST_LOGIN_DURATION_MS);
+    await db.insert(authChallenges).values({ userId: account.id, tokenHash: hashToken(challengeToken), purpose: "first_login", expiresAt });
+    const cookieStore = await cookies();
+    cookieStore.set(FIRST_LOGIN_COOKIE, challengeToken, { httpOnly: true, secure: secureCookies(), sameSite: "strict", path: "/", expires: expiresAt });
     await writeAudit({
       actorUserId: account.id,
       action: "auth.password.accepted",
@@ -98,9 +107,9 @@ export async function POST(request: NextRequest) {
       targetOpaqueId: account.id,
       permitted: false,
       requestId,
-      reason: "mfa_enrollment_required",
+      reason: account.mustChangePassword ? "password_change_required" : "mfa_enrollment_required",
     });
-    return NextResponse.json({ error: "MFA enrollment is required before sign-in" }, { status: 403 });
+    return NextResponse.json({ firstLoginRequired: true, passwordChangeRequired: account.mustChangePassword });
   }
 
   await db.update(userAccounts).set({ failedSignInCount: 0, lockedUntil: null, updatedAt: now }).where(eq(userAccounts.id, account.id));
@@ -115,6 +124,7 @@ export async function POST(request: NextRequest) {
   await db.insert(authChallenges).values({
     userId: account.id,
     tokenHash: hashToken(challengeToken),
+    purpose: "mfa",
     expiresAt,
   });
   const cookieStore = await cookies();

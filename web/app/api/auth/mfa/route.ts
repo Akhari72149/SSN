@@ -51,6 +51,7 @@ export async function POST(request: NextRequest) {
     .innerJoin(userAccounts, eq(authChallenges.userId, userAccounts.id))
     .where(and(
       eq(authChallenges.tokenHash, hashToken(challengeToken)),
+      eq(authChallenges.purpose, "mfa"),
       isNull(authChallenges.usedAt),
       gt(authChallenges.expiresAt, now),
       lt(authChallenges.attempts, 5),

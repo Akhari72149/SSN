@@ -1,0 +1,72 @@
+"use client";
+
+import { FormEvent, useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
+
+type SetupResult = { error?: string; secret?: string; otpUri?: string; recoveryCodes?: string[] };
+
+export default function SetupForm({ returnTo, passwordRequired }: { returnTo: string; passwordRequired: boolean }) {
+  const router = useRouter();
+  const [step, setStep] = useState<"password" | "mfa" | "recovery">(passwordRequired ? "password" : "mfa");
+  const [secret, setSecret] = useState("");
+  const [otpUri, setOtpUri] = useState("");
+  const [recoveryCodes, setRecoveryCodes] = useState<string[]>([]);
+  const [error, setError] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  async function request(values: Record<string, unknown>) {
+    const response = await fetch("/api/auth/first-login", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(values) });
+    const result = await response.json() as SetupResult;
+    if (!response.ok) throw new Error(result.error ?? "Account setup could not be completed");
+    return result;
+  }
+
+  useEffect(() => {
+    if (passwordRequired) return;
+    const timer = window.setTimeout(() => {
+      void request({ action: "prepare_mfa" }).then((result) => { setSecret(result.secret ?? ""); setOtpUri(result.otpUri ?? ""); }).catch((cause) => setError(cause.message));
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, [passwordRequired]);
+
+  async function changePassword(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault(); setError(""); setBusy(true);
+    const data = new FormData(event.currentTarget);
+    const password = String(data.get("password") ?? "");
+    if (password !== String(data.get("confirmPassword") ?? "")) { setError("The new passwords do not match"); setBusy(false); return; }
+    try {
+      const result = await request({ action: "change_password", newPassword: password });
+      setSecret(result.secret ?? ""); setOtpUri(result.otpUri ?? ""); setStep("mfa");
+    } catch (cause) { setError(cause instanceof Error ? cause.message : "Password could not be changed"); }
+    finally { setBusy(false); }
+  }
+
+  async function verifyMfa(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault(); setError(""); setBusy(true);
+    const data = new FormData(event.currentTarget);
+    try {
+      const result = await request({ action: "verify_mfa", code: data.get("code") });
+      setRecoveryCodes(result.recoveryCodes ?? []); setStep("recovery");
+    } catch (cause) { setError(cause instanceof Error ? cause.message : "Authenticator could not be verified"); }
+    finally { setBusy(false); }
+  }
+
+  if (step === "password") return <form className="auth-form" onSubmit={changePassword}>
+    <label>New password<input name="password" type="password" autoComplete="new-password" minLength={14} required /></label>
+    <label>Confirm new password<input name="confirmPassword" type="password" autoComplete="new-password" minLength={14} required /></label>
+    <p className="form-hint">Use at least 14 characters. It must differ from the temporary password.</p>
+    {error && <p className="form-error" role="alert">{error}</p>}
+    <button className="primary" disabled={busy}>{busy ? "Saving…" : "Change password"}</button>
+  </form>;
+
+  if (step === "mfa") return <form className="auth-form" onSubmit={verifyMfa}>
+    <p className="setup-instruction">Add a new account in your authenticator app using this setup key:</p>
+    <code className="setup-secret">{secret || "Preparing setup key…"}</code>
+    <details><summary>Authenticator URI</summary><code className="setup-uri">{otpUri}</code></details>
+    <label>Six-digit verification code<input name="code" inputMode="numeric" autoComplete="one-time-code" pattern="[0-9]{6}" required /></label>
+    {error && <p className="form-error" role="alert">{error}</p>}
+    <button className="primary" disabled={busy || !secret}>{busy ? "Checking…" : "Verify authenticator"}</button>
+  </form>;
+
+  return <section className="recovery-panel"><h2>Save your recovery codes</h2><p>Store these once in a password manager. Each code can be used only once.</p><div className="recovery-codes">{recoveryCodes.map((code) => <code key={code}>{code}</code>)}</div><button className="primary" onClick={() => { router.push(returnTo); router.refresh(); }}>I have saved these codes</button></section>;
+}

@@ -4,11 +4,13 @@ import test from "node:test";
 import {
   decryptSecret,
   encryptSecret,
+  generateTemporaryPassword,
   hashPassword,
   hashRecoveryCode,
   verifyPassword,
 } from "../lib/auth/crypto.ts";
 import { decodeBase32, encodeBase32, totpCode, verifyTotp } from "../lib/auth/totp.ts";
+import { isValidUsername, normalizeUsername } from "../lib/auth/username.ts";
 
 process.env.AUTH_ENCRYPTION_KEY = Buffer.alloc(32, 7).toString("base64");
 
@@ -17,6 +19,17 @@ test("passwords use scrypt and reject incorrect values", async () => {
   assert.match(encoded, /^scrypt\$/);
   assert.equal(await verifyPassword("a-long-unique-test-password", encoded), true);
   assert.equal(await verifyPassword("a-different-test-password", encoded), false);
+});
+
+test("temporary passwords are strong and usernames support names with spaces", () => {
+  const password = generateTemporaryPassword();
+  assert.equal(password.length, 20);
+  assert.match(password, /[A-Z]/);
+  assert.match(password, /[a-z]/);
+  assert.match(password, /[0-9]/);
+  assert.match(password, /[!@#$%*_-]/);
+  assert.equal(normalizeUsername("  Joe   M  "), "joe m");
+  assert.equal(isValidUsername("Joe M"), true);
 });
 
 test("MFA secrets are encrypted with authenticated encryption", () => {

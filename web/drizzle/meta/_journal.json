@@ -29,6 +29,13 @@
       "when": 1794002840597,
       "tag": "0003_username_authentication",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1794003445626,
+      "tag": "0004_first_login_accounts",
+      "breakpoints": true
     }
   ]
 }

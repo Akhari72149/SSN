@@ -19,8 +19,12 @@ export default function LoginForm({ returnTo }: { returnTo: string }) {
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ username: form.get("username"), password: form.get("password") }),
       });
-      const result = await response.json() as { error?: string };
+      const result = await response.json() as { error?: string; firstLoginRequired?: boolean; passwordChangeRequired?: boolean };
       if (!response.ok) throw new Error(result.error ?? "Sign-in failed");
+      if (result.firstLoginRequired) {
+        router.push(`/login/setup?returnTo=${encodeURIComponent(returnTo)}&password=${result.passwordChangeRequired ? "1" : "0"}`);
+        return;
+      }
       router.push(`/login/mfa?returnTo=${encodeURIComponent(returnTo)}`);
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "Sign-in failed");
@@ -30,7 +34,7 @@ export default function LoginForm({ returnTo }: { returnTo: string }) {
   }
 
   return <form className="auth-form" onSubmit={submit}>
-    <label>Username<input name="username" type="text" autoComplete="username" minLength={3} maxLength={50} pattern="[A-Za-z][A-Za-z0-9._-]+" autoCapitalize="none" spellCheck={false} required /></label>
+    <label>Username<input name="username" type="text" autoComplete="username" minLength={3} maxLength={50} pattern="[A-Za-z][A-Za-z0-9._ -]+" autoCapitalize="none" spellCheck={false} required /></label>
     <label>Password<input name="password" type="password" autoComplete="current-password" minLength={14} required /></label>
     {error && <p className="form-error" role="alert">{error}</p>}
     <button className="primary" disabled={submitting}>{submitting ? "Checking…" : "Continue"}</button>

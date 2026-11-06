@@ -52,6 +52,14 @@ test("renders the secure sign-in surface", async () => {
   assert.match(html, /Authentication is disabled while the application is in synthetic mode/);
 });
 
+test("renders the first-login password and MFA setup surface", async () => {
+  const response = await fetch(`${origin}/login/setup?password=1`);
+  assert.equal(response.status, 200);
+  const html = await response.text();
+  assert.match(html, /Secure your account/);
+  assert.match(html, /Change password/);
+});
+
 test("keeps authentication and live-data APIs closed in synthetic mode", async () => {
   const loginResponse = await fetch(`${origin}/api/auth/login`, {
     method: "POST",
@@ -62,6 +70,8 @@ test("keeps authentication and live-data APIs closed in synthetic mode", async (
 
   const eventsResponse = await fetch(`${origin}/api/events`);
   assert.equal(eventsResponse.status, 409);
+  assert.equal((await fetch(`${origin}/api/accounts`)).status, 409);
+  assert.equal((await fetch(`${origin}/api/auth/first-login`, { method: "POST" })).status, 409);
 
   for (const resource of ["staff", "shifts", "attendance", "deployments", "equipment"]) {
     const response = await fetch(`${origin}/api/events/00000000-0000-0000-0000-000000000000/${resource}`);

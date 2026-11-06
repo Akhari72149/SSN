@@ -1,9 +1,10 @@
 import postgres from "postgres";
 import { encryptSecret, hashPassword, hashRecoveryCode, randomToken } from "../lib/auth/crypto.ts";
 import { generateTotpSecret, totpUri } from "../lib/auth/totp.ts";
+import { isValidUsername, normalizeUsername } from "../lib/auth/username.ts";
 
 const databaseUrl = process.env.DATABASE_URL;
-const username = process.env.BOOTSTRAP_ADMIN_USERNAME?.trim().toLowerCase();
+const username = normalizeUsername(process.env.BOOTSTRAP_ADMIN_USERNAME ?? "");
 const email = process.env.BOOTSTRAP_ADMIN_EMAIL?.trim().toLowerCase() || null;
 const displayName = process.env.BOOTSTRAP_ADMIN_NAME?.trim();
 const password = process.env.BOOTSTRAP_ADMIN_PASSWORD;
@@ -11,7 +12,7 @@ const password = process.env.BOOTSTRAP_ADMIN_PASSWORD;
 if (!databaseUrl || !username || !displayName || !password) {
   throw new Error("DATABASE_URL, BOOTSTRAP_ADMIN_USERNAME, BOOTSTRAP_ADMIN_NAME and BOOTSTRAP_ADMIN_PASSWORD are required");
 }
-if (!/^[a-z][a-z0-9._-]{2,49}$/.test(username)) throw new Error("BOOTSTRAP_ADMIN_USERNAME must be 3–50 letters, numbers, dots, underscores or hyphens and start with a letter");
+if (!isValidUsername(username)) throw new Error("BOOTSTRAP_ADMIN_USERNAME must be 3–50 characters, start with a letter, and use letters, numbers, spaces, dots, underscores or hyphens");
 if (!process.env.AUTH_ENCRYPTION_KEY) throw new Error("AUTH_ENCRYPTION_KEY is required");
 
 const sql = postgres(databaseUrl, { max: 1, prepare: false, connect_timeout: 10 });
@@ -32,8 +33,8 @@ try {
 
     const passwordHash = await hashPassword(password);
     const [account] = await transaction`
-      insert into user_accounts(username,email,display_name,password_hash,status,mfa_enrolled_at)
-      values(${username},${email},${displayName},${passwordHash},'active',now())
+      insert into user_accounts(username,email,display_name,password_hash,status,mfa_enrolled_at,must_change_password)
+      values(${username},${email},${displayName},${passwordHash},'active',now(),false)
       returning id,username
     `;
     await transaction`

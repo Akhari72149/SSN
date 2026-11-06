@@ -39,7 +39,7 @@ Leave `APP_DATA_MODE=synthetic` in local development. To prepare a new live inst
 
 1. Create a PostgreSQL database that is reachable only from the application server.
 2. Set `DATABASE_URL` and a random 32-byte base64 `AUTH_ENCRYPTION_KEY` in the Windows service environment.
-3. Apply `drizzle/0000_initial_postgresql.sql`, `drizzle/0001_secure_foundation.sql`, `drizzle/0002_authentication_runtime.sql`, and `drizzle/0003_username_authentication.sql` in order, then apply `db/seeds/permission-definitions.sql`.
+3. Apply `drizzle/0000_initial_postgresql.sql` through `drizzle/0004_first_login_accounts.sql` in numeric order, then apply `db/seeds/permission-definitions.sql`.
 4. Set the one-time `BOOTSTRAP_ADMIN_USERNAME`, `BOOTSTRAP_ADMIN_NAME`, and `BOOTSTRAP_ADMIN_PASSWORD` values. `BOOTSTRAP_ADMIN_EMAIL` is optional and is not used for sign-in. Run `pnpm admin:bootstrap` from `web/`.
 5. Save the displayed MFA setup URI and recovery codes securely. Remove the bootstrap password from the environment immediately afterward.
 6. Set `APP_DATA_MODE=live`, build, and restart the service behind HTTPS through Cloudflare Tunnel.
@@ -67,6 +67,7 @@ The demonstration launcher exposes the Staff, Operations, Incidents and More sec
 In live mode, the navigation exposes permission-protected screens for:
 
 - creating events with their generated event code;
+- creating individual user accounts with generated temporary passwords and permissions;
 - adding paid or volunteer staff with separate legal and preferred names;
 - creating shifts and assigning multiple staff;
 - recording sign-on, sign-off and non-attendance;
@@ -74,3 +75,5 @@ In live mode, the navigation exposes permission-protected screens for:
 - adding, issuing and returning radios, earpieces, clothing, trackers and other kit.
 
 Every write requires the matching individual permission, a valid authenticated session and CSRF token, and writes an audit event. Incident/disclosure entry remains intentionally disabled until the outstanding retention and restricted-access decisions are approved.
+
+New user accounts are created in an invited state. Their temporary password is displayed to the administrator once, must be replaced on first sign-in, and is followed immediately by mandatory authenticator setup and one-time recovery codes.

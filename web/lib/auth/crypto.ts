@@ -50,6 +50,22 @@ export function randomToken(bytes = 32) {
   return randomBytes(bytes).toString("base64url");
 }
 
+export function generateTemporaryPassword() {
+  const upper = "ABCDEFGHJKLMNPQRSTUVWXYZ";
+  const lower = "abcdefghijkmnopqrstuvwxyz";
+  const digits = "23456789";
+  const symbols = "!@#$%*-_";
+  const all = upper + lower + digits + symbols;
+  const pick = (alphabet: string) => alphabet[randomBytes(1)[0] % alphabet.length];
+  const characters = [pick(upper), pick(lower), pick(digits), pick(symbols)];
+  while (characters.length < 20) characters.push(pick(all));
+  for (let index = characters.length - 1; index > 0; index -= 1) {
+    const swap = randomBytes(1)[0] % (index + 1);
+    [characters[index], characters[swap]] = [characters[swap], characters[index]];
+  }
+  return characters.join("");
+}
+
 export function hashToken(token: string) {
   return createHash("sha256").update(token, "utf8").digest("base64url");
 }

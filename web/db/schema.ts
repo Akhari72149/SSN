@@ -17,6 +17,7 @@ import {
 export const eventStatus = pgEnum("event_status", ["draft", "open", "closed", "archived"]);
 export const staffType = pgEnum("staff_type", ["paid", "volunteer"]);
 export const accountStatus = pgEnum("account_status", ["invited", "active", "locked", "disabled"]);
+export const authChallengePurpose = pgEnum("auth_challenge_purpose", ["mfa", "first_login"]);
 export const mfaMethod = pgEnum("mfa_method", ["totp", "webauthn"]);
 export const recoveryStatus = pgEnum("account_recovery_status", ["pending", "approved", "executed", "cancelled", "expired"]);
 export const recoveryDecision = pgEnum("account_recovery_decision", ["approve", "reject"]);
@@ -35,6 +36,7 @@ export const userAccounts = pgTable("user_accounts", {
   email: text("email"),
   displayName: text("display_name").notNull(),
   passwordHash: text("password_hash"),
+  mustChangePassword: boolean("must_change_password").notNull().default(true),
   status: accountStatus("status").notNull().default("invited"),
   mfaEnrolledAt: timestamp("mfa_enrolled_at", { withTimezone: true }),
   failedSignInCount: integer("failed_sign_in_count").notNull().default(0),
@@ -44,7 +46,7 @@ export const userAccounts = pgTable("user_accounts", {
 }, (table) => [
   uniqueIndex("user_account_username_unique").on(table.username),
   uniqueIndex("user_account_email_unique").on(sql`lower(${table.email})`),
-  check("user_account_username_format", sql`${table.username} ~ '^[a-z][a-z0-9._-]{2,49}$'`),
+  check("user_account_username_format", sql`length(${table.username}) BETWEEN 3 AND 50 AND ${table.username} ~ '^[a-z][a-z0-9._-]*( [a-z0-9][a-z0-9._-]*)*$'`),
   check("user_account_email_lowercase", sql`${table.email} IS NULL OR ${table.email} = lower(${table.email})`),
   check("user_account_failed_sign_in_nonnegative", sql`${table.failedSignInCount} >= 0`),
 ]);
@@ -112,6 +114,7 @@ export const authChallenges = pgTable("auth_challenges", {
   id: uuid("id").primaryKey().defaultRandom(),
   userId: uuid("user_id").notNull().references(() => userAccounts.id, { onDelete: "cascade" }),
   tokenHash: text("token_hash").notNull(),
+  purpose: authChallengePurpose("purpose").notNull().default("mfa"),
   attempts: integer("attempts").notNull().default(0),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
