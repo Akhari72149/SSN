@@ -7,12 +7,13 @@
   },
   "scripts": {
     "dev": "next dev",
+    "dev:setup": "powershell.exe -NoProfile -ExecutionPolicy Bypass -File ..\\scripts\\setup-development.ps1",
     "build": "next build && node scripts/prepare-standalone.mjs",
     "start": "node .next/standalone/server.js",
-    "test": "npm run build && node --test tests/rendered-html.test.mjs tests/domain.test.mjs tests/database-schema.test.mjs tests/auth-security.test.mjs",
+    "test": "npm run build && node --test tests/rendered-html.test.mjs tests/domain.test.mjs tests/database-schema.test.mjs tests/auth-security.test.mjs tests/development-setup.test.mjs",
     "lint": "eslint . --ignore-pattern dist --ignore-pattern .next",
     "db:generate": "drizzle-kit generate",
-    "admin:bootstrap": "node scripts/bootstrap-admin.mjs"
+    "admin:bootstrap": "node --env-file=.env.local scripts/bootstrap-admin.mjs"
   },
   "dependencies": {
     "drizzle-orm": "0.45.2",

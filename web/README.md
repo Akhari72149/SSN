@@ -6,9 +6,26 @@ Installable event-operations PWA using Next.js, PostgreSQL and Drizzle. It runs 
 
 - Node.js 22.13 or later
 - pnpm
-- PostgreSQL for server-side data work
+- PostgreSQL 16 or later for live local development (Docker is not required)
 
-## Local development
+## Local development with real authentication and data
+
+Install PostgreSQL for Windows and include its Command Line Tools. During installation, keep the default port `5432` unless it is already in use and remember the password chosen for the PostgreSQL `postgres` administrator.
+
+From the repository root, double-click `setup-development.cmd`. The setup asks for:
+
+- the PostgreSQL administrator username, normally `postgres`;
+- the PostgreSQL port, normally `5432`;
+- the PostgreSQL administrator password; and
+- the first Safer Spaces administrator username, display name and password.
+
+The setup then creates an isolated `safer_spaces_dev` database and separate least-privilege application login, applies every unapplied migration in order, refreshes the permission definitions, creates the first administrator when needed, generates the authentication encryption key and writes the ignored `.env.local` file with `APP_DATA_MODE=live`.
+
+The database administrator password and Safer Spaces administrator password are kept in process memory only and are removed when setup finishes. They are not written to the repository or `.env.local`.
+
+After setup, double-click `run-safer-spaces.cmd` and open <http://localhost:3000/login>. Re-running setup is safe: applied migrations are tracked and the administrator bootstrap is skipped once an account exists.
+
+For demonstration-only development without PostgreSQL:
 
 ```bash
 pnpm install
@@ -20,6 +37,7 @@ The repository launcher creates `.env.local` from `.env.example` when needed. Op
 ## Commands
 
 - `pnpm dev` — start the local Next.js server
+- `pnpm dev:setup` — configure the local PostgreSQL development database and live mode
 - `pnpm build` — produce the self-hosted standalone build
 - `pnpm start` — run a production build
 - `pnpm test` — build and run application, PWA, domain and database tests
@@ -35,7 +53,7 @@ The build command prepares `.next/standalone` with its static and public assets.
 
 ## Secure live mode
 
-Leave `APP_DATA_MODE=synthetic` in local development. To prepare a new live installation:
+The automated development setup above is for this computer only. To prepare a production installation:
 
 1. Create a PostgreSQL database that is reachable only from the application server.
 2. Set `DATABASE_URL` and a random 32-byte base64 `AUTH_ENCRYPTION_KEY` in the Windows service environment.

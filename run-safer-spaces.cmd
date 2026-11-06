@@ -29,7 +29,7 @@ if not exist "node_modules\.bin\next.cmd" (
 )
 
 echo.
-echo Starting the Safer Spaces synthetic prototype...
+echo Starting Safer Spaces Operations...
 echo Open http://localhost:3000 if the browser does not open automatically.
 echo Press Ctrl+C in this window to stop it.
 echo.
