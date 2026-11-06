@@ -4,6 +4,7 @@ import test from "node:test";
 
 const migrationUrl = new URL("../drizzle/0001_secure_foundation.sql", import.meta.url);
 const authMigrationUrl = new URL("../drizzle/0002_authentication_runtime.sql", import.meta.url);
+const usernameMigrationUrl = new URL("../drizzle/0003_username_authentication.sql", import.meta.url);
 
 test("secure foundation migration contains the agreed operational domains", async () => {
   const sql = await readFile(migrationUrl, "utf8");
@@ -37,6 +38,14 @@ test("database constraints prevent self-reset and double equipment allocation", 
   assert.match(sql, /account_recovery_no_self_reset/i);
   assert.match(sql, /equipment_active_allocation_unique[\s\S]*WHERE returned_at IS NULL/i);
   assert.match(sql, /staff_event_number_unique/i);
+});
+
+test("username authentication migration safely backfills existing accounts", async () => {
+  const sql = await readFile(usernameMigrationUrl, "utf8");
+  assert.match(sql, /ADD COLUMN "username" text;/i);
+  assert.match(sql, /UPDATE "user_accounts" SET "username"/i);
+  assert.match(sql, /ALTER COLUMN "username" SET NOT NULL/i);
+  assert.match(sql, /user_account_username_unique/i);
 });
 
 test("database access remains server-side and health failures do not leak details", async () => {

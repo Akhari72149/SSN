@@ -33,19 +33,19 @@ export async function POST(request: NextRequest) {
   } catch {
     return genericFailure(400);
   }
-  const email = typeof (body as { email?: unknown }).email === "string"
-    ? (body as { email: string }).email.trim().toLowerCase()
+  const username = typeof (body as { username?: unknown }).username === "string"
+    ? (body as { username: string }).username.trim().toLowerCase()
     : "";
   const password = typeof (body as { password?: unknown }).password === "string"
     ? (body as { password: string }).password
     : "";
-  if (!email || !password || password.length > 256) return genericFailure();
+  if (!/^[a-z][a-z0-9._-]{2,49}$/.test(username) || !password || password.length > 256) return genericFailure();
 
   const db = getDb();
   const [account] = await db
     .select()
     .from(userAccounts)
-    .where(eq(userAccounts.email, email))
+    .where(eq(userAccounts.username, username))
     .limit(1);
 
   const now = new Date();

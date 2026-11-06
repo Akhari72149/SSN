@@ -39,8 +39,8 @@ Leave `APP_DATA_MODE=synthetic` in local development. To prepare a new live inst
 
 1. Create a PostgreSQL database that is reachable only from the application server.
 2. Set `DATABASE_URL` and a random 32-byte base64 `AUTH_ENCRYPTION_KEY` in the Windows service environment.
-3. Apply `drizzle/0000_initial_postgresql.sql`, `drizzle/0001_secure_foundation.sql`, and `drizzle/0002_authentication_runtime.sql` in order, then apply `db/seeds/permission-definitions.sql`.
-4. Set the one-time `BOOTSTRAP_ADMIN_NAME`, `BOOTSTRAP_ADMIN_EMAIL`, and `BOOTSTRAP_ADMIN_PASSWORD` values and run `pnpm admin:bootstrap` from `web/`.
+3. Apply `drizzle/0000_initial_postgresql.sql`, `drizzle/0001_secure_foundation.sql`, `drizzle/0002_authentication_runtime.sql`, and `drizzle/0003_username_authentication.sql` in order, then apply `db/seeds/permission-definitions.sql`.
+4. Set the one-time `BOOTSTRAP_ADMIN_USERNAME`, `BOOTSTRAP_ADMIN_NAME`, and `BOOTSTRAP_ADMIN_PASSWORD` values. `BOOTSTRAP_ADMIN_EMAIL` is optional and is not used for sign-in. Run `pnpm admin:bootstrap` from `web/`.
 5. Save the displayed MFA setup URI and recovery codes securely. Remove the bootstrap password from the environment immediately afterward.
 6. Set `APP_DATA_MODE=live`, build, and restart the service behind HTTPS through Cloudflare Tunnel.
 
@@ -59,6 +59,8 @@ The PostgreSQL schema and append-only migrations cover:
 - immutable audit events and queued offline operations.
 
 In synthetic mode the browser uses demonstration records only. In live mode the dashboard loads its event and staff lists exclusively through authenticated, permission-checked APIs; it does not fall back to demonstration people if live data cannot be loaded.
+
+The demonstration launcher exposes the Staff, Operations, Incidents and More sections with synthetic records so the interface can be reviewed before a database is connected. Demonstration submissions never call the protected write APIs and are not saved.
 
 ## Operational workflows
 

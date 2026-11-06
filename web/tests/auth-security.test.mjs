@@ -43,3 +43,9 @@ test("session cookies are hardened and write APIs require CSRF", async () => {
   assert.match(httpSource, /x-csrf-token/);
   assert.match(httpSource, /Invalid request origin/);
 });
+
+test("sign-in uses a normalized username rather than an email address", async () => {
+  const loginSource = await readFile(new URL("../app/api/auth/login/route.ts", import.meta.url), "utf8");
+  assert.match(loginSource, /userAccounts\.username/);
+  assert.doesNotMatch(loginSource, /userAccounts\.email/);
+});

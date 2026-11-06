@@ -22,6 +22,13 @@
       "when": 1793989352297,
       "tag": "0002_authentication_runtime",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1794002840597,
+      "tag": "0003_username_authentication",
+      "breakpoints": true
     }
   ]
 }

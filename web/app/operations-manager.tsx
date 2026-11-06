@@ -14,6 +14,7 @@ type Props = {
   eventId: string;
   events: EventOption[];
   staff: StaffOption[];
+  demoMode?: boolean;
   onEventsChanged: () => void;
   onStaffCreated: () => void;
   notify: (message: string) => void;
@@ -39,13 +40,13 @@ function localInputValue(date = new Date()) {
   return adjusted.toISOString().slice(0, 16);
 }
 
-export default function OperationsManager({ section, eventId, events, staff, onEventsChanged, onStaffCreated, notify }: Props) {
+export default function OperationsManager({ section, eventId, events, staff, demoMode = false, onEventsChanged, onStaffCreated, notify }: Props) {
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
-  const [shifts, setShifts] = useState<Shift[]>([]);
-  const [attendance, setAttendance] = useState<Attendance[]>([]);
-  const [deployments, setDeployments] = useState<Deployment[]>([]);
-  const [equipment, setEquipment] = useState<Equipment[]>([]);
+  const [shifts, setShifts] = useState<Shift[]>(demoMode ? [{ id: "demo-shift", name: "Day shift", startsAt: "2026-08-15T11:00:00.000Z", endsAt: "2026-08-15T19:00:00.000Z", staffIds: ["1", "4"] }] : []);
+  const [attendance, setAttendance] = useState<Attendance[]>(demoMode ? [{ id: "demo-attendance-1", staffId: "1", kind: "sign_on", occurredAt: "2026-08-15T11:52:00.000Z" }, { id: "demo-attendance-2", staffId: "5", kind: "did_not_attend", occurredAt: "2026-08-15T10:20:00.000Z" }] : []);
+  const [deployments, setDeployments] = useState<Deployment[]>(demoMode ? [{ id: "demo-deployment", staffId: "1", label: "Welfare tent · Response lead", priority: "routine", startsAt: "2026-08-15T12:05:00.000Z", endsAt: null }] : []);
+  const [equipment, setEquipment] = useState<Equipment[]>(demoMode ? [{ id: "demo-radio", itemCode: "RAD-012", type: "radio", colour: null, size: null, condition: "issued", allocation: { id: "demo-allocation", staffId: "1", issuedAt: "2026-08-15T11:55:00.000Z" } }, { id: "demo-shirt", itemCode: "TS-PINK-M", type: "tshirt", colour: "pink", size: "M", condition: "available", allocation: null }] : []);
   const [defaultTimes] = useState(() => {
     const startsAt = new Date();
     return {
@@ -56,7 +57,7 @@ export default function OperationsManager({ section, eventId, events, staff, onE
   });
 
   const refresh = useCallback(async () => {
-    if (!eventId) return;
+    if (!eventId || demoMode) return;
     setError("");
     try {
       const [shiftData, attendanceData, deploymentData, equipmentData] = await Promise.all([
@@ -70,12 +71,16 @@ export default function OperationsManager({ section, eventId, events, staff, onE
       setDeployments(deploymentData.deployments);
       setEquipment(equipmentData.equipment);
     } catch (cause) { setError(cause instanceof Error ? cause.message : "Operational records could not be loaded"); }
-  }, [eventId]);
+  }, [demoMode, eventId]);
 
   useEffect(() => { const timer = window.setTimeout(() => void refresh(), 0); return () => window.clearTimeout(timer); }, [refresh]);
 
   async function submitForm(event: FormEvent<HTMLFormElement>, url: string, values: Record<string, unknown>, success: string, after?: () => void) {
     event.preventDefault();
+    if (demoMode) {
+      notify(`${success} · demonstration only, nothing was saved`);
+      return;
+    }
     setBusy(true); setError("");
     try {
       await api(url, { method: "POST", body: JSON.stringify(values) });

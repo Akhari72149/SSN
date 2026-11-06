@@ -47,6 +47,7 @@ test("renders the secure sign-in surface", async () => {
   assert.equal(response.status, 200);
   const html = await response.text();
   assert.match(html, /Sign in/);
+  assert.match(html, /Username/);
   assert.match(html, /verification code is required/i);
   assert.match(html, /Authentication is disabled while the application is in synthetic mode/);
 });
@@ -55,7 +56,7 @@ test("keeps authentication and live-data APIs closed in synthetic mode", async (
   const loginResponse = await fetch(`${origin}/api/auth/login`, {
     method: "POST",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify({ email: "example@example.test", password: "not-a-password" }),
+    body: JSON.stringify({ username: "example", password: "not-a-password" }),
   });
   assert.equal(loginResponse.status, 409);
 

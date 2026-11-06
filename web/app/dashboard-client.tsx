@@ -61,8 +61,8 @@ export default function DashboardClient({
   const kitOutstanding = team.filter((person) => person.equipment !== "None").length;
   const unassigned = team.filter((person) => person.deployment === "Unassigned").length;
   const quickAction = (action: string) => {
-    if (synthetic) setNotice(`${action} opened · synthetic mode`);
-    else { setNotice(`${action} workflow ready`); setActiveNav("Operations"); }
+    setNotice(synthetic ? `${action} opened · demonstration only` : `${action} workflow ready`);
+    setActiveNav("Operations");
   };
 
   const loadEvents = useCallback(async () => {
@@ -114,14 +114,15 @@ export default function DashboardClient({
       <header className="topbar"><div><p className="eyebrow">{synthetic ? "Saturday 15 August · 15:42" : "Europe/London · Current event"}</p><h1>{activeNav}</h1></div><div className="top-actions"><NetworkStatus /><button className="icon-button" aria-label="Notifications">○</button></div></header>
       <div className="mobile-install"><InstallApp /></div>
       <section className="event-bar" aria-label="Current event"><div><span className="event-mark">N</span><div><small>Current event</small><strong>{eventLabel}</strong></div></div><select aria-label="Choose event" value={event} onChange={(e) => setEvent(e.target.value)} disabled={eventOptions.length === 0}>{eventOptions.length === 0 ? <option value="">No events</option> : eventOptions.map((option) => <option value={option.id} key={option.id}>{option.label}</option>)}</select></section>
-      {(synthetic || activeNav === "Dashboard") && <><section className="hero-row"><div><p className="eyebrow coral">LIVE OPERATIONS</p><h2>Good afternoon, {viewerFirstName}.</h2><p>Here’s what needs attention across today’s shift.</p></div><div className="sync-pill"><span>✓</span><div><strong>{notice}</strong><small>Updated just now</small></div></div></section>
+      {activeNav === "Dashboard" && <><section className="hero-row"><div><p className="eyebrow coral">LIVE OPERATIONS</p><h2>Good afternoon, {viewerFirstName}.</h2><p>Here’s what needs attention across today’s shift.</p></div><div className="sync-pill"><span>✓</span><div><strong>{notice}</strong><small>Updated just now</small></div></div></section>
 
       <section className="metrics" aria-label="Aggregate event summary">
         {[["↗", "Signed on", String(synthetic ? 24 : signedOn), synthetic ? "+3 in the last hour" : "Current event", "coral-bg"], ["Ⅱ", "On break", String(synthetic ? 3 : onBreak), synthetic ? "2 due back soon" : "Current event", "amber-bg"], ["⌖", "Deployed", String(synthetic ? 19 : deployed), synthetic ? "Across 8 locations" : "Active assignments", "blue-bg"], ["!", "Kit outstanding", String(synthetic ? 7 : kitOutstanding), synthetic ? "2 overdue returns" : "Currently issued", "red-bg"]].map((metric, index) => <article key={metric[1]}><span className={`metric-icon ${metric[4]}`}>{metric[0]}</span><div><small>{metric[1]}</small><strong>{metric[2]}</strong><p className={index === 3 ? "urgent" : ""}>{metric[3]}</p></div></article>)}
       </section></>}
-      {!synthetic && activeNav !== "Dashboard" && <OperationsManager section={activeNav} eventId={event} events={eventOptions} staff={team} onEventsChanged={() => void loadEvents()} onStaffCreated={() => void loadStaff()} notify={setNotice} />}
+      {activeNav !== "Dashboard" && synthetic && <p className="demo-banner">Demonstration preview · explore every section safely; changes are not saved</p>}
+      {activeNav !== "Dashboard" && <OperationsManager section={activeNav} eventId={event} events={eventOptions} staff={team} demoMode={synthetic} onEventsChanged={() => void loadEvents()} onStaffCreated={() => void loadStaff()} notify={setNotice} />}
 
-      {(synthetic || activeNav === "Dashboard") && <section className="workspace-grid">
+      {activeNav === "Dashboard" && <section className="workspace-grid">
         <div className="panel staff-panel">
           <div className="panel-title"><div><h3>Today’s team</h3><p>Planned and active staff for this event</p></div><button className="text-button" onClick={() => setActiveNav("Staff")}>View all →</button></div>
           <label className="search"><span aria-hidden="true">⌕</span><input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Find a team member" /></label>

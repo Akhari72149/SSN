@@ -31,7 +31,8 @@ export const operationState = pgEnum("sync_operation_state", ["pending", "accept
 
 export const userAccounts = pgTable("user_accounts", {
   id: uuid("id").primaryKey().defaultRandom(),
-  email: text("email").notNull(),
+  username: text("username").notNull(),
+  email: text("email"),
   displayName: text("display_name").notNull(),
   passwordHash: text("password_hash"),
   status: accountStatus("status").notNull().default("invited"),
@@ -41,8 +42,10 @@ export const userAccounts = pgTable("user_accounts", {
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 }, (table) => [
+  uniqueIndex("user_account_username_unique").on(table.username),
   uniqueIndex("user_account_email_unique").on(sql`lower(${table.email})`),
-  check("user_account_email_lowercase", sql`${table.email} = lower(${table.email})`),
+  check("user_account_username_format", sql`${table.username} ~ '^[a-z][a-z0-9._-]{2,49}$'`),
+  check("user_account_email_lowercase", sql`${table.email} IS NULL OR ${table.email} = lower(${table.email})`),
   check("user_account_failed_sign_in_nonnegative", sql`${table.failedSignInCount} >= 0`),
 ]);
 

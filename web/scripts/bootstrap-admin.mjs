@@ -3,13 +3,15 @@ import { encryptSecret, hashPassword, hashRecoveryCode, randomToken } from "../l
 import { generateTotpSecret, totpUri } from "../lib/auth/totp.ts";
 
 const databaseUrl = process.env.DATABASE_URL;
-const email = process.env.BOOTSTRAP_ADMIN_EMAIL?.trim().toLowerCase();
+const username = process.env.BOOTSTRAP_ADMIN_USERNAME?.trim().toLowerCase();
+const email = process.env.BOOTSTRAP_ADMIN_EMAIL?.trim().toLowerCase() || null;
 const displayName = process.env.BOOTSTRAP_ADMIN_NAME?.trim();
 const password = process.env.BOOTSTRAP_ADMIN_PASSWORD;
 
-if (!databaseUrl || !email || !displayName || !password) {
-  throw new Error("DATABASE_URL, BOOTSTRAP_ADMIN_EMAIL, BOOTSTRAP_ADMIN_NAME and BOOTSTRAP_ADMIN_PASSWORD are required");
+if (!databaseUrl || !username || !displayName || !password) {
+  throw new Error("DATABASE_URL, BOOTSTRAP_ADMIN_USERNAME, BOOTSTRAP_ADMIN_NAME and BOOTSTRAP_ADMIN_PASSWORD are required");
 }
+if (!/^[a-z][a-z0-9._-]{2,49}$/.test(username)) throw new Error("BOOTSTRAP_ADMIN_USERNAME must be 3–50 letters, numbers, dots, underscores or hyphens and start with a letter");
 if (!process.env.AUTH_ENCRYPTION_KEY) throw new Error("AUTH_ENCRYPTION_KEY is required");
 
 const sql = postgres(databaseUrl, { max: 1, prepare: false, connect_timeout: 10 });
@@ -30,9 +32,9 @@ try {
 
     const passwordHash = await hashPassword(password);
     const [account] = await transaction`
-      insert into user_accounts(email,display_name,password_hash,status,mfa_enrolled_at)
-      values(${email},${displayName},${passwordHash},'active',now())
-      returning id,email
+      insert into user_accounts(username,email,display_name,password_hash,status,mfa_enrolled_at)
+      values(${username},${email},${displayName},${passwordHash},'active',now())
+      returning id,username
     `;
     await transaction`
       insert into mfa_credentials(user_id,method,label,secret_ciphertext,key_version)
@@ -47,8 +49,8 @@ try {
     return account;
   });
 
-  console.log(`Created initial administrator: ${result.email}`);
-  console.log(`Authenticator URI: ${totpUri({ secret, email })}`);
+  console.log(`Created initial administrator: ${result.username}`);
+  console.log(`Authenticator URI: ${totpUri({ secret, accountName: username })}`);
   console.log("Recovery codes (store once in a secure password manager):");
   for (const code of recoveryCodes) console.log(code);
 } finally {

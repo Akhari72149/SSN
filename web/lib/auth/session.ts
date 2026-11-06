@@ -16,7 +16,8 @@ export type AuthContext = {
   sessionId: string;
   user: {
     id: string;
-    email: string;
+    username: string;
+    email: string | null;
     displayName: string;
   };
   csrfTokenHash: string;
@@ -32,6 +33,7 @@ export async function getSessionByToken(token: string | undefined): Promise<Auth
       sessionId: authSessions.id,
       csrfTokenHash: authSessions.csrfTokenHash,
       userId: userAccounts.id,
+      username: userAccounts.username,
       email: userAccounts.email,
       displayName: userAccounts.displayName,
     })
@@ -54,7 +56,7 @@ export async function getSessionByToken(token: string | undefined): Promise<Auth
 
   return {
     sessionId: row.sessionId,
-    user: { id: row.userId, email: row.email, displayName: row.displayName },
+    user: { id: row.userId, username: row.username, email: row.email, displayName: row.displayName },
     csrfTokenHash: row.csrfTokenHash,
     permissions: new Set(grants.map((grant) => grant.key)),
   };

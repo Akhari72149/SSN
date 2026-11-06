@@ -55,8 +55,8 @@ export function verifyTotp(secret: string, suppliedCode: string, timeMs = Date.n
   return false;
 }
 
-export function totpUri(input: { secret: string; email: string; issuer?: string }) {
+export function totpUri(input: { secret: string; accountName: string; issuer?: string }) {
   const issuer = input.issuer ?? "Safer Spaces";
-  const label = encodeURIComponent(`${issuer}:${input.email}`);
+  const label = encodeURIComponent(`${issuer}:${input.accountName}`);
   return `otpauth://totp/${label}?secret=${encodeURIComponent(input.secret)}&issuer=${encodeURIComponent(issuer)}&algorithm=SHA1&digits=6&period=30`;
 }
