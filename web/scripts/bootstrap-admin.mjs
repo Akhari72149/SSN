@@ -51,6 +51,7 @@ try {
   });
 
   console.log(`Created initial administrator: ${result.username}`);
+  console.log(`Authenticator setup key: ${secret}`);
   console.log(`Authenticator URI: ${totpUri({ secret, accountName: username })}`);
   console.log("Recovery codes (store once in a secure password manager):");
   for (const code of recoveryCodes) console.log(code);

@@ -19,7 +19,7 @@ From the repository root, double-click `setup-development.cmd`. The setup asks f
 - the PostgreSQL administrator password; and
 - the first Safer Spaces administrator username, display name and password.
 
-The setup then creates an isolated `safer_spaces_dev` database and separate least-privilege application login, applies every unapplied migration in order, refreshes the permission definitions, creates the first administrator when needed, generates the authentication encryption key and writes the ignored `.env.local` file with `APP_DATA_MODE=live`.
+The setup then creates an isolated `safer_spaces_dev` database and separate least-privilege application login, applies every unapplied migration in order, refreshes the permission definitions, creates the first administrator when needed, generates the authentication encryption key and writes the ignored `.env.local` file with `APP_DATA_MODE=live`. It displays the administrator's authenticator setup key and recovery codes once; save both before closing the window.
 
 The database administrator password and Safer Spaces administrator password are kept in process memory only and are removed when setup finishes. They are not written to the repository or `.env.local`.
 
