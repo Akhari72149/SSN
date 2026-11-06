@@ -14,6 +14,7 @@ const port = process.env.SSN_DATABASE_PORT || "5432";
 const databaseAdmin = process.env.SSN_DATABASE_ADMIN || "postgres";
 const databaseAdminPassword = process.env.SSN_DATABASE_ADMIN_PASSWORD || "";
 const databaseName = "safer_spaces_dev";
+const requiredPostgresMajor = 16;
 const ownerName = "ssn_owner";
 const appName = "ssn_app";
 const ownerPassword = randomBytes(24).toString("base64url");
@@ -70,7 +71,12 @@ function readEnvValue(source, key) {
   return source.match(new RegExp(`^${key}=(.*)$`, "m"))?.[1]?.trim() ?? "";
 }
 
-console.log(`Using PostgreSQL at ${host}:${port}.`);
+const serverVersionNumber = Number(adminPsql("postgres", "", ["-tAc", "show server_version_num"]));
+const serverMajor = Math.trunc(serverVersionNumber / 10_000);
+if (!Number.isFinite(serverVersionNumber) || serverMajor !== requiredPostgresMajor) {
+  throw new Error(`PostgreSQL ${requiredPostgresMajor} is required for development/server parity, but the running server reported major version ${serverMajor || "unknown"}. Run check-postgresql-version.cmd for details.`);
+}
+console.log(`Using compatible PostgreSQL ${serverMajor} at ${host}:${port}.`);
 adminPsql("postgres", `
   do $$
   begin

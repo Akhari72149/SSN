@@ -6,11 +6,11 @@ Installable event-operations PWA using Next.js, PostgreSQL and Drizzle. It runs 
 
 - Node.js 22.13 or later
 - pnpm
-- PostgreSQL 16 or later for live local development (Docker is not required)
+- PostgreSQL 16 for live local development and server parity (Docker is not required)
 
 ## Local development with real authentication and data
 
-Install PostgreSQL for Windows and include its Command Line Tools. During installation, keep the default port `5432` unless it is already in use and remember the password chosen for the PostgreSQL `postgres` administrator.
+Install PostgreSQL 16 for Windows and include its Command Line Tools. During installation, keep the default port `5432` unless it is already in use and remember the password chosen for the PostgreSQL `postgres` administrator. Double-click `check-postgresql-version.cmd` at any time to list installed clients and verify the version of the running server; the setup refuses to continue unless the running server is PostgreSQL 16.
 
 From the repository root, double-click `setup-development.cmd`. The setup asks for:
 
