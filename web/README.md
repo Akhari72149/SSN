@@ -59,3 +59,16 @@ The PostgreSQL schema and append-only migrations cover:
 - immutable audit events and queued offline operations.
 
 In synthetic mode the browser uses demonstration records only. In live mode the dashboard loads its event and staff lists exclusively through authenticated, permission-checked APIs; it does not fall back to demonstration people if live data cannot be loaded.
+
+## Operational workflows
+
+In live mode, the navigation exposes permission-protected screens for:
+
+- creating events with their generated event code;
+- adding paid or volunteer staff with separate legal and preferred names;
+- creating shifts and assigning multiple staff;
+- recording sign-on, sign-off and non-attendance;
+- starting and completing deployments; and
+- adding, issuing and returning radios, earpieces, clothing, trackers and other kit.
+
+Every write requires the matching individual permission, a valid authenticated session and CSRF token, and writes an audit event. Incident/disclosure entry remains intentionally disabled until the outstanding retention and restricted-access decisions are approved.

@@ -61,6 +61,11 @@ test("keeps authentication and live-data APIs closed in synthetic mode", async (
 
   const eventsResponse = await fetch(`${origin}/api/events`);
   assert.equal(eventsResponse.status, 409);
+
+  for (const resource of ["staff", "shifts", "attendance", "deployments", "equipment"]) {
+    const response = await fetch(`${origin}/api/events/00000000-0000-0000-0000-000000000000/${resource}`);
+    assert.equal(response.status, 409, `${resource} must remain closed outside live mode`);
+  }
 });
 
 test("provides an installable standalone manifest", async () => {

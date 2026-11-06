@@ -1,9 +1,10 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import Image from "next/image";
 import { InstallApp, NetworkStatus } from "./pwa";
 import LogoutButton from "./logout-button";
+import OperationsManager from "./operations-manager";
 
 type Person = {
   id: string;
@@ -59,52 +60,46 @@ export default function DashboardClient({
   const deployed = team.filter((person) => person.deployment !== "Unassigned").length;
   const kitOutstanding = team.filter((person) => person.equipment !== "None").length;
   const unassigned = team.filter((person) => person.deployment === "Unassigned").length;
-  const quickAction = (action: string) => setNotice(synthetic ? `${action} opened · synthetic mode` : `${action} is permission-protected · workflow UI coming next`);
+  const quickAction = (action: string) => {
+    if (synthetic) setNotice(`${action} opened · synthetic mode`);
+    else { setNotice(`${action} workflow ready`); setActiveNav("Operations"); }
+  };
 
-  useEffect(() => {
+  const loadEvents = useCallback(async () => {
     if (synthetic) return;
-    let cancelled = false;
-    fetch("/api/events")
-      .then(async (response) => {
-        if (!response.ok) throw new Error("Events could not be loaded");
-        return response.json() as Promise<{ events: Array<{ id: string; name: string }> }>;
-      })
-      .then((result) => {
-        if (cancelled) return;
-        const options = result.events.map((item) => ({ id: item.id, label: item.name }));
-        setEventOptions(options);
-        setEvent(options[0]?.id ?? "");
-        setNotice(options.length ? "Live events loaded securely" : "No events have been created yet");
-      })
-      .catch(() => { if (!cancelled) setNotice("Events are unavailable or not permitted"); });
-    return () => { cancelled = true; };
+    try {
+      const response = await fetch("/api/events");
+      if (!response.ok) throw new Error("Events could not be loaded");
+      const result = await response.json() as { events: Array<{ id: string; name: string }> };
+      const options = result.events.map((item) => ({ id: item.id, label: item.name }));
+      setEventOptions(options);
+      setEvent((current) => options.some((option) => option.id === current) ? current : options[0]?.id ?? "");
+      setNotice(options.length ? "Live events loaded securely" : "No events have been created yet");
+    } catch { setNotice("Events are unavailable or not permitted"); }
   }, [synthetic]);
 
-  useEffect(() => {
+  const loadStaff = useCallback(async () => {
     if (synthetic || !event) return;
-    let cancelled = false;
-    fetch(`/api/events/${encodeURIComponent(event)}/staff`)
-      .then(async (response) => {
-        if (!response.ok) throw new Error("Staff could not be loaded");
-        return response.json() as Promise<{ staff: Array<{ id: string; legalName: string; preferredName: string; staffType: "paid" | "volunteer"; roleLabel: string | null }> }>;
-      })
-      .then((result) => {
-        if (cancelled) return;
-        setTeam(result.staff.map((person) => ({
-          id: person.id,
-          name: person.preferredName,
-          legalName: person.legalName,
-          role: person.roleLabel ?? "Staff",
-          staffType: person.staffType === "paid" ? "Paid" : "Volunteer",
-          shift: "Not scheduled",
-          state: "Planned",
-          deployment: "Unassigned",
-          equipment: "None",
-        })));
-      })
-      .catch(() => { if (!cancelled) { setTeam([]); setNotice("Staff records are unavailable or not permitted"); } });
-    return () => { cancelled = true; };
+    try {
+      const response = await fetch(`/api/events/${encodeURIComponent(event)}/staff`);
+      if (!response.ok) throw new Error("Staff could not be loaded");
+      const result = await response.json() as { staff: Array<{ id: string; legalName: string; preferredName: string; staffType: "paid" | "volunteer"; roleLabel: string | null; attendanceState: "sign_on" | "sign_off" | "did_not_attend" | null; deploymentLabels: string[]; equipmentLabels: string[]; shift: { name: string; startsAt: string; endsAt: string } | null }> };
+      setTeam(result.staff.map((person) => ({
+        id: person.id,
+        name: person.preferredName,
+        legalName: person.legalName,
+        role: person.roleLabel ?? "Staff",
+        staffType: person.staffType === "paid" ? "Paid" : "Volunteer",
+        shift: person.shift ? `${new Date(person.shift.startsAt).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" })}–${new Date(person.shift.endsAt).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" })}` : "Not scheduled",
+        state: person.attendanceState === "sign_on" ? "Signed on" : person.attendanceState === "did_not_attend" ? "Did not attend" : "Planned",
+        deployment: person.deploymentLabels.length ? person.deploymentLabels.join(" · ") : "Unassigned",
+        equipment: person.equipmentLabels.length ? person.equipmentLabels.join(" · ") : "None",
+      })));
+    } catch { setTeam([]); setNotice("Staff records are unavailable or not permitted"); }
   }, [event, synthetic]);
+
+  useEffect(() => { const timer = window.setTimeout(() => void loadEvents(), 0); return () => window.clearTimeout(timer); }, [loadEvents]);
+  useEffect(() => { const timer = window.setTimeout(() => void loadStaff(), 0); return () => window.clearTimeout(timer); }, [loadStaff]);
 
   return <div className="app-shell">
     <aside className="sidebar" aria-label="Primary navigation">
@@ -116,16 +111,17 @@ export default function DashboardClient({
     </aside>
 
     <main>
-      <header className="topbar"><div><p className="eyebrow">Saturday 15 August · 15:42</p><h1>{activeNav}</h1></div><div className="top-actions"><NetworkStatus /><button className="icon-button" aria-label="Notifications">○</button></div></header>
+      <header className="topbar"><div><p className="eyebrow">{synthetic ? "Saturday 15 August · 15:42" : "Europe/London · Current event"}</p><h1>{activeNav}</h1></div><div className="top-actions"><NetworkStatus /><button className="icon-button" aria-label="Notifications">○</button></div></header>
       <div className="mobile-install"><InstallApp /></div>
       <section className="event-bar" aria-label="Current event"><div><span className="event-mark">N</span><div><small>Current event</small><strong>{eventLabel}</strong></div></div><select aria-label="Choose event" value={event} onChange={(e) => setEvent(e.target.value)} disabled={eventOptions.length === 0}>{eventOptions.length === 0 ? <option value="">No events</option> : eventOptions.map((option) => <option value={option.id} key={option.id}>{option.label}</option>)}</select></section>
-      <section className="hero-row"><div><p className="eyebrow coral">LIVE OPERATIONS</p><h2>Good afternoon, {viewerFirstName}.</h2><p>Here’s what needs attention across today’s shift.</p></div><div className="sync-pill"><span>✓</span><div><strong>{notice}</strong><small>Updated just now</small></div></div></section>
+      {(synthetic || activeNav === "Dashboard") && <><section className="hero-row"><div><p className="eyebrow coral">LIVE OPERATIONS</p><h2>Good afternoon, {viewerFirstName}.</h2><p>Here’s what needs attention across today’s shift.</p></div><div className="sync-pill"><span>✓</span><div><strong>{notice}</strong><small>Updated just now</small></div></div></section>
 
       <section className="metrics" aria-label="Aggregate event summary">
         {[["↗", "Signed on", String(synthetic ? 24 : signedOn), synthetic ? "+3 in the last hour" : "Current event", "coral-bg"], ["Ⅱ", "On break", String(synthetic ? 3 : onBreak), synthetic ? "2 due back soon" : "Current event", "amber-bg"], ["⌖", "Deployed", String(synthetic ? 19 : deployed), synthetic ? "Across 8 locations" : "Active assignments", "blue-bg"], ["!", "Kit outstanding", String(synthetic ? 7 : kitOutstanding), synthetic ? "2 overdue returns" : "Currently issued", "red-bg"]].map((metric, index) => <article key={metric[1]}><span className={`metric-icon ${metric[4]}`}>{metric[0]}</span><div><small>{metric[1]}</small><strong>{metric[2]}</strong><p className={index === 3 ? "urgent" : ""}>{metric[3]}</p></div></article>)}
-      </section>
+      </section></>}
+      {!synthetic && activeNav !== "Dashboard" && <OperationsManager section={activeNav} eventId={event} events={eventOptions} staff={team} onEventsChanged={() => void loadEvents()} onStaffCreated={() => void loadStaff()} notify={setNotice} />}
 
-      <section className="workspace-grid">
+      {(synthetic || activeNav === "Dashboard") && <section className="workspace-grid">
         <div className="panel staff-panel">
           <div className="panel-title"><div><h3>Today’s team</h3><p>Planned and active staff for this event</p></div><button className="text-button" onClick={() => setActiveNav("Staff")}>View all →</button></div>
           <label className="search"><span aria-hidden="true">⌕</span><input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Find a team member" /></label>
@@ -135,11 +131,11 @@ export default function DashboardClient({
           <div className="panel actions-panel"><div className="panel-title"><div><h3>Quick actions</h3><p>Common shift tasks</p></div></div><div className="action-grid">{[["↗", "Sign on", "Start a shift"], ["▣", "Issue kit", "Radio, earpiece & clothing"], ["⌖", "Deploy", "Assign one or more tasks"], ["≡", "Radio log", "Add an entry"]].map((action) => <button key={action[1]} onClick={() => quickAction(action[1])}><span>{action[0]}</span><strong>{action[1]}</strong><small>{action[2]}</small></button>)}</div></div>
           <div className="panel attention"><div className="panel-title"><div><h3>Needs attention</h3><p>Items to review</p></div><span className="count">{synthetic ? 3 : unassigned}</span></div>{synthetic && <button onClick={() => quickAction("Overdue equipment")}><span className="warn">!</span><div><strong>2 overdue kit returns</strong><small>Expected by 15:30</small></div><span>›</span></button>}<button onClick={() => quickAction("Unassigned staff")}><span className="neutral">○</span><div><strong>{synthetic ? "1 person unassigned" : `${unassigned} ${unassigned === 1 ? "person" : "people"} unassigned`}</strong><small>{synthetic ? "Shift starts at 16:00" : "Current event records"}</small></div><span>›</span></button></div>
         </div>
-      </section>
+      </section>}
       <footer><span>Safer Spaces Operations · {synthetic ? "Synthetic prototype" : "Secure live mode"}</span><span>Last server check 15:42 · Europe/London</span></footer>
     </main>
 
     {selected && <div className="modal-backdrop"><section className="drawer" role="dialog" aria-modal="true" aria-labelledby="person-name"><button className="close" aria-label="Close profile" onClick={() => setSelected(null)}>×</button><p className="eyebrow coral">STAFF PROFILE</p><h2 id="person-name">{selected.name}</h2><p>{selected.role} · {selected.staffType} · Today, {selected.shift}</p><dl><div><dt>Legal name</dt><dd>{selected.legalName}</dd></div><div><dt>Attendance</dt><dd>{selected.state}</dd></div><div><dt>Current deployments</dt><dd>{selected.deployment}</dd></div><div><dt>Equipment held</dt><dd>{selected.equipment}</dd></div></dl><button className="primary" onClick={() => { setNotice(`Attendance workflow opened for ${selected.name}`); setSelected(null); }}>Open attendance workflow</button></section></div>}
-    <nav className="mobile-nav" aria-label="Mobile navigation">{navigation.slice(0, 4).map((item) => <button key={item} className={activeNav === item ? "active" : ""} onClick={() => setActiveNav(item)}><i />{item}</button>)}</nav>
+    <nav className="mobile-nav" aria-label="Mobile navigation">{navigation.map((item) => <button key={item} className={activeNav === item ? "active" : ""} onClick={() => setActiveNav(item)}><i />{item}</button>)}</nav>
   </div>;
 }

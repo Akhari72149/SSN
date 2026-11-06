@@ -1,8 +1,8 @@
 import { randomUUID } from "node:crypto";
-import { and, asc, eq, ilike, max, or, sql } from "drizzle-orm";
+import { and, asc, desc, eq, ilike, isNull, max, or, sql } from "drizzle-orm";
 import { NextRequest, NextResponse } from "next/server";
 import { getDb } from "@/db";
-import { auditEvents, staff } from "@/db/schema";
+import { attendanceEvents, auditEvents, deployments, equipmentAllocations, equipmentItems, shiftAssignments, shifts, staff } from "@/db/schema";
 import { formatStaffCode, permissions } from "@/db/domain";
 import { authorizeApi } from "@/lib/auth/http";
 
@@ -12,7 +12,8 @@ export async function GET(request: NextRequest, context: { params: Promise<{ eve
   const authorization = await authorizeApi(request, { permission: permissions.staffRead });
   if (authorization.error) return authorization.error;
   const { eventId } = await context.params;
-  const rows = await getDb().select({
+  const db = getDb();
+  const rows = await db.select({
     id: staff.id,
     staffCode: staff.staffCode,
     legalName: staff.legalName,
@@ -21,7 +22,19 @@ export async function GET(request: NextRequest, context: { params: Promise<{ eve
     roleLabel: staff.roleLabel,
     active: staff.active,
   }).from(staff).where(eq(staff.eventId, eventId)).orderBy(asc(staff.preferredName));
-  return NextResponse.json({ staff: rows });
+  const [attendance, activeDeployments, activeEquipment, assignments] = await Promise.all([
+    db.select({ staffId: attendanceEvents.staffId, kind: attendanceEvents.kind, occurredAt: attendanceEvents.occurredAt }).from(attendanceEvents).where(eq(attendanceEvents.eventId, eventId)).orderBy(desc(attendanceEvents.occurredAt)),
+    db.select({ staffId: deployments.staffId, label: deployments.label }).from(deployments).where(and(eq(deployments.eventId, eventId), isNull(deployments.endsAt))),
+    db.select({ staffId: equipmentAllocations.staffId, itemCode: equipmentItems.itemCode, type: equipmentItems.type, colour: equipmentItems.colour, size: equipmentItems.size }).from(equipmentAllocations).innerJoin(equipmentItems, eq(equipmentItems.id, equipmentAllocations.equipmentItemId)).where(and(eq(equipmentAllocations.eventId, eventId), isNull(equipmentAllocations.returnedAt))),
+    db.select({ staffId: shiftAssignments.staffId, name: shifts.name, startsAt: shifts.startsAt, endsAt: shifts.endsAt }).from(shiftAssignments).innerJoin(shifts, eq(shifts.id, shiftAssignments.shiftId)).where(and(eq(shifts.eventId, eventId), isNull(shiftAssignments.cancelledAt))).orderBy(asc(shifts.startsAt)),
+  ]);
+  return NextResponse.json({ staff: rows.map((person) => {
+    const latestAttendance = attendance.find((item) => item.staffId === person.id)?.kind ?? null;
+    const personDeployments = activeDeployments.filter((item) => item.staffId === person.id).map((item) => item.label);
+    const personEquipment = activeEquipment.filter((item) => item.staffId === person.id).map((item) => [item.itemCode, item.type, item.colour, item.size].filter(Boolean).join(" · "));
+    const personShift = assignments.find((item) => item.staffId === person.id);
+    return { ...person, attendanceState: latestAttendance, deploymentLabels: personDeployments, equipmentLabels: personEquipment, shift: personShift ? { name: personShift.name, startsAt: personShift.startsAt, endsAt: personShift.endsAt } : null };
+  }) });
 }
 
 export async function POST(request: NextRequest, context: { params: Promise<{ eventId: string }> }) {
