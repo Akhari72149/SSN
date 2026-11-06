@@ -22,7 +22,7 @@ if not exist ".env.local" (
   echo Created web\.env.local with development-only settings.
 )
 
-if not exist "node_modules\.bin\vinext.cmd" (
+if not exist "node_modules\.bin\next.cmd" (
   echo Installing application dependencies...
   call "%PNPM_RUNNER%" install
   if errorlevel 1 goto :failed

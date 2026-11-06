@@ -2,6 +2,19 @@
   "version": "7",
   "dialect": "postgresql",
   "entries": [
-    { "idx": 0, "version": "7", "when": 1786790400000, "tag": "0000_initial_postgresql", "breakpoints": true }
+    {
+      "idx": 0,
+      "version": "7",
+      "when": 1786790400000,
+      "tag": "0000_initial_postgresql",
+      "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1793986648296,
+      "tag": "0001_secure_foundation",
+      "breakpoints": true
+    }
   ]
 }

@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import Image from "next/image";
 import { InstallApp, NetworkStatus } from "./pwa";
 
 type Person = {
@@ -36,7 +37,7 @@ export default function Home() {
 
   return <div className="app-shell">
     <aside className="sidebar" aria-label="Primary navigation">
-      <div className="brand"><img src="/safer-spaces-logo.webp" alt="Safer Spaces" /><span>Operations</span></div>
+      <div className="brand"><Image src="/safer-spaces-logo.webp" alt="Safer Spaces" width={168} height={51} priority /><span>Operations</span></div>
       <nav>{navigation.map((item) => <button key={item} className={activeNav === item ? "nav-item active" : "nav-item"} onClick={() => setActiveNav(item)}><span className="nav-dot" aria-hidden="true" />{item}</button>)}</nav>
       <InstallApp />
       <div className="privacy-note"><span aria-hidden="true">◉</span><div><strong>Synthetic prototype</strong><small>No live or personal data</small></div></div>

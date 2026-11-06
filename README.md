@@ -12,4 +12,4 @@ Double-click `run-safer-spaces.cmd` in this folder. The launcher will:
 
 Open <http://localhost:3000> if it does not open automatically. Press `Ctrl+C` in the launcher window to stop the preview.
 
-The current visual slice does not query PostgreSQL. `DATABASE_URL` is already configured for the future local PostgreSQL service, and no live data is used.
+The interface still uses synthetic data only. The app now builds for the self-hosted Next.js Node runtime and includes the PostgreSQL schema, migrations, individual permission model, MFA-ready account structures, account-recovery controls, and operational data model. Do not enter live data until the authentication and permission middleware is connected.
