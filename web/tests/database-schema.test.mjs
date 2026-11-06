@@ -3,6 +3,7 @@ import { readFile } from "node:fs/promises";
 import test from "node:test";
 
 const migrationUrl = new URL("../drizzle/0001_secure_foundation.sql", import.meta.url);
+const authMigrationUrl = new URL("../drizzle/0002_authentication_runtime.sql", import.meta.url);
 
 test("secure foundation migration contains the agreed operational domains", async () => {
   const sql = await readFile(migrationUrl, "utf8");
@@ -21,9 +22,12 @@ test("secure foundation migration contains the agreed operational domains", asyn
 
 test("authentication material is stored as hashes or ciphertext", async () => {
   const sql = await readFile(migrationUrl, "utf8");
+  const authSql = await readFile(authMigrationUrl, "utf8");
   assert.match(sql, /password_hash text/i);
   assert.match(sql, /token_hash text NOT NULL/i);
   assert.match(sql, /secret_ciphertext text/i);
+  assert.match(authSql, /CREATE TABLE "auth_challenges"/i);
+  assert.match(authSql, /csrf_token_hash/i);
   assert.doesNotMatch(sql, /password text[,\n]/i);
   assert.doesNotMatch(sql, /session_token text/i);
 });

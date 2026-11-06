@@ -1,0 +1,45 @@
+import assert from "node:assert/strict";
+import { readFile } from "node:fs/promises";
+import test from "node:test";
+import {
+  decryptSecret,
+  encryptSecret,
+  hashPassword,
+  hashRecoveryCode,
+  verifyPassword,
+} from "../lib/auth/crypto.ts";
+import { decodeBase32, encodeBase32, totpCode, verifyTotp } from "../lib/auth/totp.ts";
+
+process.env.AUTH_ENCRYPTION_KEY = Buffer.alloc(32, 7).toString("base64");
+
+test("passwords use scrypt and reject incorrect values", async () => {
+  const encoded = await hashPassword("a-long-unique-test-password");
+  assert.match(encoded, /^scrypt\$/);
+  assert.equal(await verifyPassword("a-long-unique-test-password", encoded), true);
+  assert.equal(await verifyPassword("a-different-test-password", encoded), false);
+});
+
+test("MFA secrets are encrypted with authenticated encryption", () => {
+  const encrypted = encryptSecret("JBSWY3DPEHPK3PXP");
+  assert.match(encrypted, /^v1\./);
+  assert.equal(decryptSecret(encrypted), "JBSWY3DPEHPK3PXP");
+  assert.notEqual(hashRecoveryCode("ABCDEF-123456"), hashRecoveryCode("ABCDEF-654321"));
+});
+
+test("TOTP matches the RFC 6238 SHA-1 test vector", () => {
+  const secretBytes = Buffer.from("12345678901234567890", "ascii");
+  const secret = encodeBase32(secretBytes);
+  assert.deepEqual(decodeBase32(secret), secretBytes);
+  assert.equal(totpCode(secret, 59_000, 30, 8), "94287082");
+  const current = totpCode(secret, 1_700_000_000_000);
+  assert.equal(verifyTotp(secret, current, 1_700_000_000_000), true);
+});
+
+test("session cookies are hardened and write APIs require CSRF", async () => {
+  const sessionSource = await readFile(new URL("../lib/auth/session.ts", import.meta.url), "utf8");
+  const httpSource = await readFile(new URL("../lib/auth/http.ts", import.meta.url), "utf8");
+  assert.match(sessionSource, /httpOnly: true/);
+  assert.match(sessionSource, /sameSite: "strict"/);
+  assert.match(httpSource, /x-csrf-token/);
+  assert.match(httpSource, /Invalid request origin/);
+});

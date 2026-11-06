@@ -15,6 +15,13 @@
       "when": 1793986648296,
       "tag": "0001_secure_foundation",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1793989352297,
+      "tag": "0002_authentication_runtime",
+      "breakpoints": true
     }
   ]
 }

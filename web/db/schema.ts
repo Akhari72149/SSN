@@ -94,6 +94,7 @@ export const authSessions = pgTable("auth_sessions", {
   id: uuid("id").primaryKey().defaultRandom(),
   userId: uuid("user_id").notNull().references(() => userAccounts.id, { onDelete: "cascade" }),
   tokenHash: text("token_hash").notNull(),
+  csrfTokenHash: text("csrf_token_hash").notNull(),
   mfaVerifiedAt: timestamp("mfa_verified_at", { withTimezone: true }).notNull(),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
@@ -102,6 +103,21 @@ export const authSessions = pgTable("auth_sessions", {
   uniqueIndex("auth_session_token_hash_unique").on(table.tokenHash),
   index("auth_session_active_user_idx").on(table.userId, table.expiresAt).where(sql`${table.revokedAt} IS NULL`),
   check("auth_session_expiry_after_creation", sql`${table.expiresAt} > ${table.createdAt}`),
+]);
+
+export const authChallenges = pgTable("auth_challenges", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  userId: uuid("user_id").notNull().references(() => userAccounts.id, { onDelete: "cascade" }),
+  tokenHash: text("token_hash").notNull(),
+  attempts: integer("attempts").notNull().default(0),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+  usedAt: timestamp("used_at", { withTimezone: true }),
+}, (table) => [
+  uniqueIndex("auth_challenge_token_hash_unique").on(table.tokenHash),
+  index("auth_challenge_active_user_idx").on(table.userId, table.expiresAt).where(sql`${table.usedAt} IS NULL`),
+  check("auth_challenge_attempt_range", sql`${table.attempts} BETWEEN 0 AND 5`),
+  check("auth_challenge_expiry_after_creation", sql`${table.expiresAt} > ${table.createdAt}`),
 ]);
 
 export const accountRecoveryRequests = pgTable("account_recovery_requests", {

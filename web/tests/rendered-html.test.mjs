@@ -1,8 +1,79 @@
 import assert from "node:assert/strict";
+import { spawn } from "node:child_process";
 import { readFile } from "node:fs/promises";
-import test from "node:test";
-test("renders the synthetic operations dashboard",async()=>{const html=await readFile(new URL("../.next/server/app/index.html",import.meta.url),"utf8");assert.match(html,/<title>Safer Spaces Operations<\/title>/i);assert.match(html,/Synthetic prototype/);assert.match(html,/Today’s team/);assert.match(html,/Install on this device/);assert.match(html,/Paid/);assert.match(html,/Volunteer/);assert.match(html,/manifest\.webmanifest/);assert.match(html,/No live or personal data/);assert.doesNotMatch(html,/codex-preview/)});
+import { after, before, test } from "node:test";
 
-test("provides an installable standalone manifest",async()=>{const manifest=JSON.parse(await readFile(new URL("../public/manifest.webmanifest",import.meta.url),"utf8"));assert.equal(manifest.name,"Safer Spaces Operations");assert.equal(manifest.display,"standalone");assert.equal(manifest.start_url,"/");assert.ok(manifest.icons.some((icon)=>icon.purpose.includes("maskable")))});
+const port = 32_000 + (process.pid % 1_000);
+const origin = `http://127.0.0.1:${port}`;
+let server;
 
-test("offline worker caches only the application shell",async()=>{const worker=await readFile(new URL("../public/sw.js",import.meta.url),"utf8");assert.match(worker,/offline\.html/);assert.match(worker,/request\.mode === "navigate"/);assert.doesNotMatch(worker,/caches\.put\([^\n]*api\//)});
+before(async () => {
+  server = spawn(process.execPath, [".next/standalone/server.js"], {
+    cwd: new URL("..", import.meta.url),
+    env: { ...process.env, APP_DATA_MODE: "synthetic", PORT: String(port), HOSTNAME: "127.0.0.1" },
+    stdio: ["ignore", "pipe", "pipe"],
+  });
+  const deadline = Date.now() + 10_000;
+  while (Date.now() < deadline) {
+    try {
+      const response = await fetch(`${origin}/api/health`);
+      if (response.ok) return;
+    } catch {
+      await new Promise((resolve) => setTimeout(resolve, 50));
+    }
+  }
+  throw new Error("Standalone server did not become ready");
+});
+
+after(() => server?.kill());
+
+test("renders the synthetic operations dashboard", async () => {
+  const response = await fetch(origin);
+  assert.equal(response.status, 200);
+  const html = await response.text();
+  assert.match(html, /<title>Safer Spaces Operations<\/title>/i);
+  assert.match(html, /Synthetic prototype/);
+  assert.match(html, /Today’s team/);
+  assert.match(html, /Install on this device/);
+  assert.match(html, /Paid/);
+  assert.match(html, /Volunteer/);
+  assert.match(html, /manifest\.webmanifest/);
+  assert.match(html, /No live or personal data/);
+  assert.doesNotMatch(html, /codex-preview/);
+});
+
+test("renders the secure sign-in surface", async () => {
+  const response = await fetch(`${origin}/login`);
+  assert.equal(response.status, 200);
+  const html = await response.text();
+  assert.match(html, /Sign in/);
+  assert.match(html, /verification code is required/i);
+  assert.match(html, /Authentication is disabled while the application is in synthetic mode/);
+});
+
+test("keeps authentication and live-data APIs closed in synthetic mode", async () => {
+  const loginResponse = await fetch(`${origin}/api/auth/login`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ email: "example@example.test", password: "not-a-password" }),
+  });
+  assert.equal(loginResponse.status, 409);
+
+  const eventsResponse = await fetch(`${origin}/api/events`);
+  assert.equal(eventsResponse.status, 409);
+});
+
+test("provides an installable standalone manifest", async () => {
+  const manifest = JSON.parse(await readFile(new URL("../public/manifest.webmanifest", import.meta.url), "utf8"));
+  assert.equal(manifest.name, "Safer Spaces Operations");
+  assert.equal(manifest.display, "standalone");
+  assert.equal(manifest.start_url, "/");
+  assert.ok(manifest.icons.some((icon) => icon.purpose.includes("maskable")));
+});
+
+test("offline worker caches only the application shell", async () => {
+  const worker = await readFile(new URL("../public/sw.js", import.meta.url), "utf8");
+  assert.match(worker, /offline\.html/);
+  assert.match(worker, /request\.mode === "navigate"/);
+  assert.doesNotMatch(worker, /caches\.put\([^\n]*api\//);
+});

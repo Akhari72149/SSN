@@ -1,6 +1,6 @@
-# Safer Spaces synthetic prototype
+# Safer Spaces Operations
 
-The first visual application slice is in `web/` and contains synthetic data only.
+The installable PWA is in `web/`. It uses safe synthetic data by default and now includes an opt-in, authenticated PostgreSQL live mode.
 
 ## Run on Windows
 
@@ -12,4 +12,4 @@ Double-click `run-safer-spaces.cmd` in this folder. The launcher will:
 
 Open <http://localhost:3000> if it does not open automatically. Press `Ctrl+C` in the launcher window to stop the preview.
 
-The interface still uses synthetic data only. The app now builds for the self-hosted Next.js Node runtime and includes the PostgreSQL schema, migrations, individual permission model, MFA-ready account structures, account-recovery controls, and operational data model. Do not enter live data until the authentication and permission middleware is connected.
+The app builds for the self-hosted Next.js Node runtime and includes MFA login, server-side sessions, individual permission checks, CSRF protection, audit events, account-recovery controls, and protected event/staff APIs. See `web/README.md` for the ordered database, first-administrator, and live-mode setup steps.
