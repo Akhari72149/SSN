@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { and, asc, eq, gt, inArray, isNull, lt } from "drizzle-orm";
+import { and, asc, eq, gt, inArray, isNull, lt, notInArray, sql } from "drizzle-orm";
 import { NextRequest, NextResponse } from "next/server";
 import { getDb } from "@/db";
 import { auditEvents, events, positions, shiftAssignments, shifts, staff } from "@/db/schema";
@@ -59,7 +59,7 @@ export async function POST(request: NextRequest, context: { params: Promise<{ ev
   let body: unknown;
   try { body = await request.json(); } catch { return NextResponse.json({ error: "Invalid request" }, { status: 400 }); }
   const input = body as Record<string, unknown>;
-  const action = input.action === "create_position" ? "create_position" : "create_shift";
+  const action = input.action === "create_position" ? "create_position" : input.action === "update_assignments" ? "update_assignments" : "create_shift";
 
   if (action === "create_position") {
     const name = typeof input.name === "string" ? input.name.trim() : "";
@@ -76,6 +76,36 @@ export async function POST(request: NextRequest, context: { params: Promise<{ ev
     } catch (cause) {
       if (cause instanceof Error && cause.message === "event_not_found") return NextResponse.json({ error: "Event not found" }, { status: 404 });
       return NextResponse.json({ error: "That position already exists for this event" }, { status: 409 });
+    }
+  }
+
+  if (action === "update_assignments") {
+    const shiftId = typeof input.shiftId === "string" ? input.shiftId : "";
+    const staffIds = Array.isArray(input.staffIds) ? [...new Set(input.staffIds.filter((id): id is string => typeof id === "string"))] : [];
+    if (!shiftId) return NextResponse.json({ error: "Shift is required" }, { status: 400 });
+    try {
+      await getDb().transaction(async (transaction) => {
+        const shiftRows = await transaction.execute<{ id: string }>(sql`select id from shifts where id=${shiftId} and event_id=${eventId} for update`);
+        if (!shiftRows[0]) throw new Error("shift_not_found");
+        if (staffIds.length) {
+          const validStaff = await transaction.select({ id: staff.id }).from(staff).where(and(eq(staff.eventId, eventId), inArray(staff.id, staffIds)));
+          if (validStaff.length !== staffIds.length) throw new Error("invalid_staff");
+          await transaction.insert(shiftAssignments).values(staffIds.map((staffId) => ({ shiftId, staffId }))).onConflictDoUpdate({
+            target: [shiftAssignments.shiftId, shiftAssignments.staffId],
+            set: { cancelledAt: null, rowVersion: sql`${shiftAssignments.rowVersion} + 1` },
+          });
+        }
+        const cancellationConditions = [eq(shiftAssignments.shiftId, shiftId), isNull(shiftAssignments.cancelledAt)];
+        if (staffIds.length) cancellationConditions.push(notInArray(shiftAssignments.staffId, staffIds));
+        await transaction.update(shiftAssignments).set({ cancelledAt: new Date(), rowVersion: sql`${shiftAssignments.rowVersion} + 1` }).where(and(...cancellationConditions));
+        await transaction.insert(auditEvents).values({ actorUserId: authorization.context.user.id, action: "shift.assignments_updated", targetType: "shift", targetOpaqueId: shiftId, permitted: true, requestId, metadata: { eventId, assignedStaff: staffIds.length } });
+      });
+      return NextResponse.json({ updated: true });
+    } catch (cause) {
+      const code = cause instanceof Error ? cause.message : "";
+      if (code === "shift_not_found") return NextResponse.json({ error: "Shift not found" }, { status: 404 });
+      if (code === "invalid_staff") return NextResponse.json({ error: "Every assigned person must belong to this event" }, { status: 400 });
+      return NextResponse.json({ error: "Shift assignments could not be updated" }, { status: 409 });
     }
   }
 

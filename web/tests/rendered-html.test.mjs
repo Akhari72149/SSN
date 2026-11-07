@@ -90,17 +90,23 @@ test("shift planning provides position-based Gantt views and person search", asy
   const planner = await readFile(new URL("../app/shift-planner.tsx", import.meta.url), "utf8");
   const route = await readFile(new URL("../app/api/events/[eventId]/shifts/route.ts", import.meta.url), "utf8");
   assert.match(dashboard, /"Staff", "Shifts", "Operations"/);
-  assert.match(planner, /Gantt schedule/);
+  assert.match(planner, /<h2>Schedule<\/h2>/);
   for (const view of ["One day", "Entire event", "Date range", "Search person"]) assert.match(planner, new RegExp(view));
   assert.match(planner, /create_position/);
   assert.match(planner, /positionId/);
   assert.match(planner, /form-modal-backdrop/);
   assert.match(planner, /Number of shifts/);
+  assert.match(planner, /setModal\("assignment"\)/);
+  assert.match(planner, /Save assignments/);
+  assert.match(planner, /update_assignments/);
   assert.match(planner, /scheduling database update is not installed/i);
   assert.match(route, /innerJoin\(staff/);
   assert.match(route, /shift\.assignments\.some/);
   assert.match(route, /length: quantity/);
   assert.match(route, /batchQuantity: quantity/);
+  assert.match(route, /shift\.assignments_updated/);
+  assert.match(route, /onConflictDoUpdate/);
+  assert.match(route, /for update/);
 });
 
 test("keeps authentication and live-data APIs closed in synthetic mode", async () => {
