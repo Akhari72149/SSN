@@ -4,16 +4,30 @@ import test from "node:test";
 
 test("development setup uses local PostgreSQL without Docker", async () => {
   const setup = await readFile(new URL("../scripts/setup-development.mjs", import.meta.url), "utf8");
+  const grants = await readFile(new URL("../scripts/database-grants.mjs", import.meta.url), "utf8");
   assert.match(setup, /127\.0\.0\.1/);
   assert.match(setup, /safer_spaces_dev/);
   assert.match(setup, /findPsql/);
   assert.match(setup, /APP_DATA_MODE", "live"/);
   assert.match(setup, /ssn_schema_migrations/);
-  assert.match(setup, /public\.positions/);
+  assert.match(grants, /public\.positions/);
   assert.match(setup, /requiredPostgresMajor = 16/);
   assert.match(setup, /show server_version_num/);
   assert.doesNotMatch(setup, /docker/i);
   assert.doesNotMatch(setup, /BOOTSTRAP_ADMIN_PASSWORD.*setEnvValue/);
+});
+
+test("database updater applies only pending transactional migrations", async () => {
+  const updater = await readFile(new URL("../scripts/update-development-database.mjs", import.meta.url), "utf8");
+  const wrapper = await readFile(new URL("../../scripts/update-development-database.ps1", import.meta.url), "utf8");
+  assert.match(updater, /ssn_schema_migrations/);
+  assert.match(updater, /set local role/);
+  assert.match(updater, /lock_timeout/);
+  assert.match(updater, /statement_timeout/);
+  assert.match(updater, /applicationGrantSql/);
+  assert.doesNotMatch(updater, /BOOTSTRAP_ADMIN/);
+  assert.match(wrapper, /Read-PlainTextPassword/);
+  assert.match(wrapper, /Remove-Item Env:SSN_DATABASE_ADMIN_PASSWORD/);
 });
 
 test("version checker validates the running server rather than only the client", async () => {
