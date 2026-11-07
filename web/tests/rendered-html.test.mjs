@@ -97,7 +97,10 @@ test("shift planning provides position-based Gantt views and person search", asy
   assert.match(planner, /form-modal-backdrop/);
   assert.match(planner, /Number of shifts/);
   assert.match(planner, /setModal\("assignment"\)/);
-  assert.match(planner, /Save assignments/);
+  assert.match(planner, /Choose people/);
+  assert.match(planner, /staff-choice/);
+  assert.match(planner, /Search staff/);
+  assert.match(planner, /Manage team/);
   assert.match(planner, /update_assignments/);
   assert.match(planner, /scheduling database update is not installed/i);
   assert.match(route, /innerJoin\(staff/);
