@@ -28,3 +28,19 @@ test("development setup keeps database passwords out of command arguments", asyn
   assert.match(setup, /PGPASSWORD: password/);
   assert.doesNotMatch(setup, /["']--password["']/);
 });
+
+test("the first administrator enrols MFA through the first-login screen", async () => {
+  const bootstrap = await readFile(new URL("../scripts/bootstrap-admin.mjs", import.meta.url), "utf8");
+  assert.match(bootstrap, /'active',null,false/);
+  assert.match(bootstrap, /MFA will be connected by QR code/);
+  assert.doesNotMatch(bootstrap, /insert into mfa_credentials/i);
+  assert.doesNotMatch(bootstrap, /Authenticator setup key/);
+});
+
+test("development MFA recovery cannot target another database", async () => {
+  const reset = await readFile(new URL("../scripts/reset-development-mfa.mjs", import.meta.url), "utf8");
+  assert.match(reset, /localHosts/);
+  assert.match(reset, /safer_spaces_dev/);
+  assert.match(reset, /mfa_enrolled_at = null/);
+  assert.match(reset, /auth\.development_mfa_reset/);
+});

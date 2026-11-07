@@ -2,8 +2,27 @@
 
 import { FormEvent, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import qrcode from "@/lib/vendor/qrcode-generator.mjs";
 
 type SetupResult = { error?: string; secret?: string; otpUri?: string; recoveryCodes?: string[] };
+
+function AuthenticatorQrCode({ value }: { value: string }) {
+  if (!value) return <div className="setup-qr-placeholder" aria-live="polite">Preparing QR code…</div>;
+  const code = qrcode(0, "M");
+  code.addData(value, "Byte");
+  code.make();
+  const count = code.getModuleCount();
+  const cells: Array<{ row: number; column: number }> = [];
+  for (let row = 0; row < count; row += 1) {
+    for (let column = 0; column < count; column += 1) {
+      if (code.isDark(row, column)) cells.push({ row, column });
+    }
+  }
+  return <svg className="setup-qr" viewBox={`-4 -4 ${count + 8} ${count + 8}`} role="img" aria-label="Authenticator setup QR code" shapeRendering="crispEdges">
+    <rect x="-4" y="-4" width={count + 8} height={count + 8} fill="white" />
+    {cells.map(({ row, column }) => <rect key={`${row}-${column}`} x={column} y={row} width="1" height="1" fill="black" />)}
+  </svg>;
+}
 
 export default function SetupForm({ returnTo, passwordRequired }: { returnTo: string; passwordRequired: boolean }) {
   const router = useRouter();
@@ -60,9 +79,9 @@ export default function SetupForm({ returnTo, passwordRequired }: { returnTo: st
   </form>;
 
   if (step === "mfa") return <form className="auth-form" onSubmit={verifyMfa}>
-    <p className="setup-instruction">Add a new account in your authenticator app using this setup key:</p>
-    <code className="setup-secret">{secret || "Preparing setup key…"}</code>
-    <details><summary>Authenticator URI</summary><code className="setup-uri">{otpUri}</code></details>
+    <p className="setup-instruction">In Google Authenticator or another authenticator app, choose <strong>Add account</strong> and scan this QR code.</p>
+    <AuthenticatorQrCode value={otpUri} />
+    <details className="setup-manual"><summary>Can’t scan the QR code?</summary><p className="setup-instruction">Choose “Enter a setup key” in the authenticator app, then enter:</p><code className="setup-secret">{secret || "Preparing setup key…"}</code></details>
     <label>Six-digit verification code<input name="code" inputMode="numeric" autoComplete="one-time-code" pattern="[0-9]{6}" required /></label>
     {error && <p className="form-error" role="alert">{error}</p>}
     <button className="primary" disabled={busy || !secret}>{busy ? "Checking…" : "Verify authenticator"}</button>

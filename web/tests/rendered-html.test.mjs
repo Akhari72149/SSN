@@ -60,6 +60,14 @@ test("renders the first-login password and MFA setup surface", async () => {
   assert.match(html, /Change password/);
 });
 
+test("the first-login client includes local QR enrolment", async () => {
+  const setup = await readFile(new URL("../app/login/setup/setup-form.tsx", import.meta.url), "utf8");
+  assert.match(setup, /Authenticator setup QR code/);
+  assert.match(setup, /qrcode-generator\.mjs/);
+  assert.match(setup, /Can’t scan the QR code/);
+  assert.doesNotMatch(setup, /api\.qrserver|chart\.googleapis/);
+});
+
 test("keeps authentication and live-data APIs closed in synthetic mode", async () => {
   const loginResponse = await fetch(`${origin}/api/auth/login`, {
     method: "POST",
