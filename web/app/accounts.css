@@ -71,6 +71,44 @@
   gap: 8px;
 }
 
+.account-list-filters {
+  display: flex;
+  gap: 4px;
+  padding: 3px;
+  border: 1px solid #dfdbd5;
+  border-radius: 20px;
+  background: #f5f3f0;
+}
+
+.account-list-filters button {
+  min-height: 30px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: 16px;
+  background: transparent;
+  color: #716c66;
+  font-size: 9px;
+  font-weight: 750;
+  cursor: pointer;
+}
+
+.account-list-filters button.active {
+  background: #fff;
+  color: #9e4037;
+  box-shadow: 0 2px 8px #34231f14;
+}
+
+.account-list-filters span {
+  margin-left: 3px;
+  color: #a34137;
+}
+
+.account-row-shell {
+  display: grid;
+  grid-template-columns: 1fr 82px;
+  gap: 8px;
+}
+
 .account-row-card {
   display: grid;
   grid-template-columns: auto minmax(180px, 1fr) minmax(150px, auto) 80px auto;
@@ -479,6 +517,124 @@
   opacity: .78;
 }
 
+.archive-row-action,
+.restore-row-action {
+  border-radius: 8px;
+  background: #fff;
+  font-size: 9px;
+  font-weight: 750;
+  cursor: pointer;
+}
+
+.archive-row-action {
+  border: 1px solid #e1b3ad;
+  color: #9d3931;
+}
+
+.restore-row-action {
+  border: 1px solid #a9cdbc;
+  color: #286348;
+}
+
+.archive-row-action:hover { background: #fff5f3; }
+.restore-row-action:hover { background: #f2faf6; }
+.archive-row-action:disabled { cursor: not-allowed; opacity: .4; }
+
+.account-readiness.archived { color: #625f5a; }
+.account-readiness.archived i { background: #77726c; }
+
+.account-modal-header.danger {
+  background: linear-gradient(135deg, #fff8f6, #f6dcd8);
+  border-bottom-color: #e7bab4;
+}
+
+.account-modal-header.archived {
+  background: linear-gradient(135deg, #faf9f7, #eae6e1);
+  border-bottom-color: #d7d1ca;
+}
+
+.account-modal-header.danger .eyebrow { color: #a03730; }
+.account-modal-header.archived .eyebrow { color: #615d58; }
+
+.archive-modal-body {
+  display: grid;
+  gap: 16px;
+  padding: 25px 34px 30px;
+}
+
+.archive-confirm-form > label:first-child {
+  display: grid;
+  gap: 7px;
+  color: #595550;
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.archive-confirm-form textarea {
+  min-height: 100px;
+  resize: vertical;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  background: #fff;
+  color: var(--ink);
+  font: inherit;
+}
+
+.archive-confirm-form textarea:focus {
+  outline: 3px solid #d85f5138;
+  border-color: var(--coral);
+}
+
+.archive-confirm-check {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  padding: 12px;
+  border: 1px solid #ead0cc;
+  border-radius: 7px;
+  background: #fff7f5;
+  color: #684b47;
+  font-size: 10px;
+  line-height: 1.4;
+}
+
+.archive-confirm-check input { margin-top: 1px; }
+
+.danger-primary {
+  min-height: 48px;
+  border: 0;
+  border-radius: 4px;
+  background: #a53e35;
+  color: #fff;
+  font-weight: 750;
+  cursor: pointer;
+}
+
+.danger-primary:hover { background: #8f3029; }
+.danger-primary:disabled { cursor: not-allowed; opacity: .45; }
+
+.archive-details {
+  display: grid;
+  gap: 0;
+  margin: 0;
+  border: 1px solid #e1ddd7;
+  border-radius: 8px;
+  background: #faf9f7;
+}
+
+.archive-details > div {
+  display: grid;
+  grid-template-columns: 120px 1fr;
+  gap: 12px;
+  padding: 13px 15px;
+  border-bottom: 1px solid #e7e3de;
+}
+
+.archive-details > div:last-child { border-bottom: 0; }
+.archive-details dt { color: var(--muted); font-size: 8px; font-weight: 750; text-transform: uppercase; letter-spacing: .05em; }
+.archive-details dd { margin: 0; font-size: 10px; line-height: 1.45; }
+
 .account-detail-tabs {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -726,6 +882,8 @@
   .account-security-grid { grid-template-columns: 1fr 1fr; }
   .account-actions-card { display: grid; }
   .account-action-buttons { justify-content: flex-start; }
+  .account-row-shell { grid-template-columns: 1fr; }
+  .archive-row-action, .restore-row-action { min-height: 38px; }
 }
 
 @media (max-width: 700px) {
@@ -740,6 +898,8 @@
   .account-detail-body { padding: 20px; }
   .account-security-grid { grid-template-columns: 1fr; }
   .pending-recovery dl > div { grid-template-columns: 1fr; gap: 3px; }
+  .archive-modal-body { padding: 20px; }
+  .archive-details > div { grid-template-columns: 1fr; gap: 3px; }
 }
 
 @media (prefers-reduced-motion: reduce) {

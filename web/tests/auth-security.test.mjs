@@ -72,3 +72,13 @@ test("account recovery requires two people and revokes prior authentication", as
   assert.match(recoverySource, /mustChangePassword: true/);
   assert.match(recoverySource, /mfaEnrolledAt: null/);
 });
+
+test("account archiving is recoverable and blocks active authentication", async () => {
+  const lifecycleSource = await readFile(new URL("../app/api/accounts/[accountId]/route.ts", import.meta.url), "utf8");
+  assert.match(lifecycleSource, /action === "archive"/);
+  assert.match(lifecycleSource, /status: "disabled", archivedAt: now/);
+  assert.match(lifecycleSource, /authSessions[\s\S]*revokedAt/);
+  assert.match(lifecycleSource, /action === "restore"/);
+  assert.match(lifecycleSource, /archivedAt: null, archivedByUserId: null, archiveReason: null/);
+  assert.doesNotMatch(lifecycleSource, /delete\(userAccounts\)/);
+});

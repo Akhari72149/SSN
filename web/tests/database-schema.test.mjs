@@ -7,6 +7,7 @@ const authMigrationUrl = new URL("../drizzle/0002_authentication_runtime.sql", i
 const usernameMigrationUrl = new URL("../drizzle/0003_username_authentication.sql", import.meta.url);
 const firstLoginMigrationUrl = new URL("../drizzle/0004_first_login_accounts.sql", import.meta.url);
 const ganttMigrationUrl = new URL("../drizzle/0005_positions_and_gantt.sql", import.meta.url);
+const accountArchiveMigrationUrl = new URL("../drizzle/0006_account_archiving.sql", import.meta.url);
 
 test("secure foundation migration contains the agreed operational domains", async () => {
   const sql = await readFile(migrationUrl, "utf8");
@@ -64,6 +65,16 @@ test("Gantt scheduling links indexed positions and event date ranges", async () 
   assert.match(sql, /ADD COLUMN position_id/i);
   assert.match(sql, /shift_position_starts_idx/i);
   assert.match(sql, /shift_event_range_idx/i);
+});
+
+test("account archiving preserves history with accountable metadata", async () => {
+  const sql = await readFile(accountArchiveMigrationUrl, "utf8");
+  assert.match(sql, /archived_at timestamptz/i);
+  assert.match(sql, /archived_by_user_id uuid/i);
+  assert.match(sql, /archive_reason text/i);
+  assert.match(sql, /user_account_archived_by_fkey/i);
+  assert.match(sql, /user_account_archive_consistency/i);
+  assert.match(sql, /length\(trim\(archive_reason\)\) BETWEEN 10 AND 500/i);
 });
 
 test("database access remains server-side and health failures do not leak details", async () => {

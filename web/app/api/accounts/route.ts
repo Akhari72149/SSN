@@ -17,7 +17,7 @@ export async function GET(request: NextRequest) {
   const db = getDb();
   const now = new Date();
   const [accounts, grants, catalog, sessions, recoveries, recoveryApprovals] = await Promise.all([
-    db.select({ id: userAccounts.id, username: userAccounts.username, displayName: userAccounts.displayName, email: userAccounts.email, status: userAccounts.status, mustChangePassword: userAccounts.mustChangePassword, mfaEnrolledAt: userAccounts.mfaEnrolledAt, failedSignInCount: userAccounts.failedSignInCount, lockedUntil: userAccounts.lockedUntil, updatedAt: userAccounts.updatedAt }).from(userAccounts).orderBy(asc(userAccounts.username)),
+    db.select({ id: userAccounts.id, username: userAccounts.username, displayName: userAccounts.displayName, email: userAccounts.email, status: userAccounts.status, mustChangePassword: userAccounts.mustChangePassword, mfaEnrolledAt: userAccounts.mfaEnrolledAt, failedSignInCount: userAccounts.failedSignInCount, lockedUntil: userAccounts.lockedUntil, archivedAt: userAccounts.archivedAt, archivedByUserId: userAccounts.archivedByUserId, archiveReason: userAccounts.archiveReason, updatedAt: userAccounts.updatedAt }).from(userAccounts).orderBy(asc(userAccounts.username)),
     db.select({ userId: userPermissions.userId, permissionKey: userPermissions.permissionKey }).from(userPermissions),
     db.select().from(permissionDefinitions).orderBy(asc(permissionDefinitions.key)),
     db.select({ userId: authSessions.userId, createdAt: authSessions.createdAt }).from(authSessions).orderBy(asc(authSessions.createdAt)),
@@ -34,6 +34,7 @@ export async function GET(request: NextRequest) {
       return {
         ...account,
         isCurrentUser: account.id === authorization.context.user.id,
+        archivedBy: account.archivedByUserId ? accountNames.get(account.archivedByUserId) ?? "Authorised user" : null,
         lastSignInAt: lastSignIns.get(account.id) ?? null,
         permissions: grants.filter((grant) => grant.userId === account.id).map((grant) => grant.permissionKey),
         recovery: recovery ? { id: recovery.id, reason: recovery.reason, requestedAt: recovery.requestedAt, expiresAt: recovery.expiresAt, requestedBy: accountNames.get(recovery.requestedByUserId) ?? "Authorised user", approvalCount: approvals.length, viewerApproved: approvals.some((item) => item.approverUserId === authorization.context.user.id) } : null,

@@ -139,6 +139,12 @@ test("accounts have a dedicated page with modal creation and permission editing"
   assert.match(lifecycleRoute, /account\.recovery_executed/);
   assert.match(lifecycleRoute, /sessionsRevoked: true, mfaRevoked: true/);
   assert.match(lifecycleRoute, /for update/);
+  assert.match(manager, /Archived accounts/);
+  assert.match(manager, /Reason for archiving/);
+  assert.match(manager, /Restore account/);
+  assert.match(lifecycleRoute, /You cannot archive your own account/);
+  assert.match(lifecycleRoute, /account\.\$\{action === "archive" \? "archived"/);
+  assert.match(lifecycleRoute, /pendingRecoveryCancelled: true/);
 });
 
 test("keeps authentication and live-data APIs closed in synthetic mode", async () => {

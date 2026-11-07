@@ -2,6 +2,7 @@ import { sql } from "drizzle-orm";
 import {
   boolean,
   check,
+  foreignKey,
   index,
   integer,
   jsonb,
@@ -41,6 +42,9 @@ export const userAccounts = pgTable("user_accounts", {
   mfaEnrolledAt: timestamp("mfa_enrolled_at", { withTimezone: true }),
   failedSignInCount: integer("failed_sign_in_count").notNull().default(0),
   lockedUntil: timestamp("locked_until", { withTimezone: true }),
+  archivedAt: timestamp("archived_at", { withTimezone: true }),
+  archivedByUserId: uuid("archived_by_user_id"),
+  archiveReason: text("archive_reason"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 }, (table) => [
@@ -49,6 +53,10 @@ export const userAccounts = pgTable("user_accounts", {
   check("user_account_username_format", sql`length(${table.username}) BETWEEN 3 AND 50 AND ${table.username} ~ '^[a-z][a-z0-9._-]*( [a-z0-9][a-z0-9._-]*)*$'`),
   check("user_account_email_lowercase", sql`${table.email} IS NULL OR ${table.email} = lower(${table.email})`),
   check("user_account_failed_sign_in_nonnegative", sql`${table.failedSignInCount} >= 0`),
+  foreignKey({ name: "user_account_archived_by_fkey", columns: [table.archivedByUserId], foreignColumns: [table.id] }).onDelete("restrict"),
+  index("user_account_archived_by_idx").on(table.archivedByUserId),
+  index("user_account_archived_at_idx").on(table.archivedAt),
+  check("user_account_archive_consistency", sql`(${table.archivedAt} IS NULL AND ${table.archivedByUserId} IS NULL AND ${table.archiveReason} IS NULL) OR (${table.archivedAt} IS NOT NULL AND ${table.archivedByUserId} IS NOT NULL AND length(trim(${table.archiveReason})) BETWEEN 10 AND 500)`),
 ]);
 
 export const mfaCredentials = pgTable("mfa_credentials", {

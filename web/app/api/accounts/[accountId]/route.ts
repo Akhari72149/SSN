@@ -18,17 +18,32 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ a
   if (!UUID_PATTERN.test(accountId)) return NextResponse.json({ error: "Choose a valid account" }, { status: 400 });
   let body: unknown;
   try { body = await request.json(); } catch { return NextResponse.json({ error: "Invalid request" }, { status: 400 }); }
-  const action = (body as { action?: unknown }).action;
-  if (action !== "disable" && action !== "enable" && action !== "unlock") return NextResponse.json({ error: "Unsupported account action" }, { status: 400 });
-  if (action === "disable" && accountId === authorization.context.user.id) return NextResponse.json({ error: "You cannot disable your own account" }, { status: 400 });
+  const input = body as Record<string, unknown>;
+  const action = input.action;
+  if (action !== "disable" && action !== "enable" && action !== "unlock" && action !== "archive" && action !== "restore") return NextResponse.json({ error: "Unsupported account action" }, { status: 400 });
+  if ((action === "disable" || action === "archive") && accountId === authorization.context.user.id) return NextResponse.json({ error: action === "archive" ? "You cannot archive your own account" : "You cannot disable your own account" }, { status: 400 });
+  const archiveReason = typeof input.reason === "string" ? input.reason.trim() : "";
+  if (action === "archive" && (archiveReason.length < 10 || archiveReason.length > 500)) return NextResponse.json({ error: "Enter an archive reason of 10–500 characters" }, { status: 400 });
   const now = new Date();
   const requestId = request.headers.get("x-request-id") ?? randomUUID();
   try {
     const result = await getDb().transaction(async (transaction) => {
-      const rows = await transaction.execute<{ id: string; status: "invited" | "active" | "locked" | "disabled"; mustChangePassword: boolean; mfaEnrolledAt: Date | null }>(sql`select id, status, must_change_password as "mustChangePassword", mfa_enrolled_at as "mfaEnrolledAt" from user_accounts where id=${accountId} for update`);
+      const rows = await transaction.execute<{ id: string; status: "invited" | "active" | "locked" | "disabled"; mustChangePassword: boolean; mfaEnrolledAt: Date | null; archivedAt: Date | null }>(sql`select id, status, must_change_password as "mustChangePassword", mfa_enrolled_at as "mfaEnrolledAt", archived_at as "archivedAt" from user_accounts where id=${accountId} for update`);
       const target = rows[0];
       if (!target) throw new Error("account_not_found");
-      if (action === "disable") {
+      if (action === "archive") {
+        if (target.archivedAt) throw new Error("already_archived");
+        await transaction.update(userAccounts).set({ status: "disabled", archivedAt: now, archivedByUserId: authorization.context.user.id, archiveReason, updatedAt: now }).where(eq(userAccounts.id, accountId));
+        await transaction.update(authSessions).set({ revokedAt: now }).where(and(eq(authSessions.userId, accountId), isNull(authSessions.revokedAt)));
+        await transaction.update(authChallenges).set({ usedAt: now }).where(and(eq(authChallenges.userId, accountId), isNull(authChallenges.usedAt)));
+        await transaction.update(accountRecoveryRequests).set({ status: "cancelled" }).where(and(eq(accountRecoveryRequests.targetUserId, accountId), sql`${accountRecoveryRequests.status} in ('pending', 'approved')`));
+      } else if (action === "restore") {
+        if (!target.archivedAt) throw new Error("not_archived");
+        const restoredStatus = target.mustChangePassword || !target.mfaEnrolledAt ? "invited" : "active";
+        await transaction.update(userAccounts).set({ status: restoredStatus, archivedAt: null, archivedByUserId: null, archiveReason: null, failedSignInCount: 0, lockedUntil: null, updatedAt: now }).where(eq(userAccounts.id, accountId));
+      } else if (target.archivedAt) {
+        throw new Error("account_archived");
+      } else if (action === "disable") {
         await transaction.update(userAccounts).set({ status: "disabled", updatedAt: now }).where(eq(userAccounts.id, accountId));
         await transaction.update(authSessions).set({ revokedAt: now }).where(and(eq(authSessions.userId, accountId), isNull(authSessions.revokedAt)));
       } else if (action === "enable") {
@@ -38,12 +53,15 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ a
         const restoredStatus = target.status === "locked" ? (target.mustChangePassword || !target.mfaEnrolledAt ? "invited" : "active") : target.status;
         await transaction.update(userAccounts).set({ status: restoredStatus, failedSignInCount: 0, lockedUntil: null, updatedAt: now }).where(eq(userAccounts.id, accountId));
       }
-      await transaction.insert(auditEvents).values({ actorUserId: authorization.context.user.id, action: `account.${action}`, targetType: "user_account", targetOpaqueId: accountId, permitted: true, requestId });
+      await transaction.insert(auditEvents).values({ actorUserId: authorization.context.user.id, action: `account.${action === "archive" ? "archived" : action === "restore" ? "restored" : action}`, targetType: "user_account", targetOpaqueId: accountId, permitted: true, requestId, metadata: action === "archive" ? { reason: archiveReason, sessionsRevoked: true, pendingRecoveryCancelled: true } : {} });
       return { action };
     });
     return NextResponse.json(result);
   } catch (cause) {
     if (cause instanceof Error && cause.message === "account_not_found") return NextResponse.json({ error: "Account not found" }, { status: 404 });
+    if (cause instanceof Error && cause.message === "already_archived") return NextResponse.json({ error: "This account is already archived" }, { status: 409 });
+    if (cause instanceof Error && cause.message === "not_archived") return NextResponse.json({ error: "This account is not archived" }, { status: 409 });
+    if (cause instanceof Error && cause.message === "account_archived") return NextResponse.json({ error: "Restore this archived account before changing it" }, { status: 409 });
     return NextResponse.json({ error: "The account could not be updated" }, { status: 409 });
   }
 }
@@ -66,8 +84,9 @@ export async function POST(request: NextRequest, context: { params: Promise<{ ac
     if (reason.length < 10 || reason.length > 500) return NextResponse.json({ error: "Enter a recovery reason of 10–500 characters" }, { status: 400 });
     try {
       const recovery = await getDb().transaction(async (transaction) => {
-        const targetRows = await transaction.execute<{ id: string }>(sql`select id from user_accounts where id=${accountId} for update`);
+        const targetRows = await transaction.execute<{ id: string; archivedAt: Date | null }>(sql`select id, archived_at as "archivedAt" from user_accounts where id=${accountId} for update`);
         if (!targetRows[0]) throw new Error("account_not_found");
+        if (targetRows[0].archivedAt) throw new Error("account_archived");
         const existing = await transaction.select({ id: accountRecoveryRequests.id }).from(accountRecoveryRequests).where(and(eq(accountRecoveryRequests.targetUserId, accountId), sql`${accountRecoveryRequests.status} in ('pending', 'approved')`, sql`${accountRecoveryRequests.expiresAt} > ${now}`)).limit(1);
         if (existing[0]) throw new Error("recovery_exists");
         const expiresAt = new Date(now.getTime() + 24 * 60 * 60 * 1000);
@@ -80,6 +99,7 @@ export async function POST(request: NextRequest, context: { params: Promise<{ ac
     } catch (cause) {
       const code = cause instanceof Error ? cause.message : "";
       if (code === "account_not_found") return NextResponse.json({ error: "Account not found" }, { status: 404 });
+      if (code === "account_archived") return NextResponse.json({ error: "Restore this account before starting recovery" }, { status: 409 });
       if (code === "recovery_exists") return NextResponse.json({ error: "A recovery request is already awaiting approval" }, { status: 409 });
       return NextResponse.json({ error: "Account recovery could not be started" }, { status: 409 });
     }
@@ -92,6 +112,9 @@ export async function POST(request: NextRequest, context: { params: Promise<{ ac
   const passwordHash = await hashPassword(temporaryPassword);
   try {
     const result = await getDb().transaction(async (transaction) => {
+      const targetRows = await transaction.execute<{ id: string; archivedAt: Date | null }>(sql`select id, archived_at as "archivedAt" from user_accounts where id=${accountId} for update`);
+      if (!targetRows[0]) throw new Error("account_not_found");
+      if (targetRows[0].archivedAt) throw new Error("account_archived");
       const rows = await transaction.execute<{ id: string; targetUserId: string; status: string; expiresAt: Date }>(sql`select id, target_user_id as "targetUserId", status, expires_at as "expiresAt" from account_recovery_requests where id=${recoveryRequestId} and target_user_id=${accountId} for update`);
       const recovery = rows[0];
       if (!recovery) throw new Error("recovery_not_found");
@@ -113,6 +136,8 @@ export async function POST(request: NextRequest, context: { params: Promise<{ ac
     return NextResponse.json({ ...result, temporaryPassword: result.executed ? temporaryPassword : undefined }, { headers: { "cache-control": "no-store" } });
   } catch (cause) {
     const code = cause instanceof Error ? cause.message : "";
+    if (code === "account_not_found") return NextResponse.json({ error: "Account not found" }, { status: 404 });
+    if (code === "account_archived") return NextResponse.json({ error: "Restore this account before approving recovery" }, { status: 409 });
     if (code === "recovery_not_found") return NextResponse.json({ error: "Recovery request not found" }, { status: 404 });
     if (code === "already_approved") return NextResponse.json({ error: "You have already approved this recovery" }, { status: 409 });
     if (code === "recovery_expired") return NextResponse.json({ error: "This recovery request has expired" }, { status: 409 });
