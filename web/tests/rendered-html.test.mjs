@@ -116,6 +116,7 @@ test("accounts have a dedicated page with modal creation and permission editing"
   const dashboard = await readFile(new URL("../app/dashboard-client.tsx", import.meta.url), "utf8");
   const manager = await readFile(new URL("../app/account-manager.tsx", import.meta.url), "utf8");
   const route = await readFile(new URL("../app/api/accounts/route.ts", import.meta.url), "utf8");
+  const lifecycleRoute = await readFile(new URL("../app/api/accounts/[accountId]/route.ts", import.meta.url), "utf8");
   assert.match(dashboard, /"Incidents", "Accounts", "More"/);
   assert.match(dashboard, /activeNav === "Accounts"/);
   assert.doesNotMatch(dashboard, /activeNav === "More" && <AccountManager/);
@@ -128,6 +129,16 @@ test("accounts have a dedicated page with modal creation and permission editing"
   assert.match(route, /account\.permissions_updated/);
   assert.match(route, /You cannot remove your own account or permission management access/);
   assert.match(route, /for update/);
+  assert.match(manager, /Account & recovery/);
+  assert.match(manager, /Start recovery request/);
+  assert.match(manager, /Give second approval/);
+  assert.match(manager, /Last sign-in/);
+  assert.match(lifecycleRoute, /You cannot disable your own account/);
+  assert.match(lifecycleRoute, /You cannot recover your own account/);
+  assert.match(lifecycleRoute, /approvals\.length < 2/);
+  assert.match(lifecycleRoute, /account\.recovery_executed/);
+  assert.match(lifecycleRoute, /sessionsRevoked: true, mfaRevoked: true/);
+  assert.match(lifecycleRoute, /for update/);
 });
 
 test("keeps authentication and live-data APIs closed in synthetic mode", async () => {
@@ -142,6 +153,7 @@ test("keeps authentication and live-data APIs closed in synthetic mode", async (
   assert.equal(eventsResponse.status, 409);
   assert.equal((await fetch(`${origin}/api/accounts`)).status, 409);
   assert.equal((await fetch(`${origin}/api/accounts`, { method: "PATCH" })).status, 409);
+  assert.equal((await fetch(`${origin}/api/accounts/00000000-0000-4000-8000-000000000000`, { method: "POST" })).status, 409);
   assert.equal((await fetch(`${origin}/api/auth/first-login`, { method: "POST" })).status, 409);
 
   for (const resource of ["staff", "shifts", "attendance", "deployments", "equipment"]) {

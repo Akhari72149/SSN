@@ -62,3 +62,13 @@ test("sign-in uses a normalized username rather than an email address", async ()
   assert.match(loginSource, /userAccounts\.username/);
   assert.doesNotMatch(loginSource, /userAccounts\.email/);
 });
+
+test("account recovery requires two people and revokes prior authentication", async () => {
+  const recoverySource = await readFile(new URL("../app/api/accounts/[accountId]/route.ts", import.meta.url), "utf8");
+  assert.match(recoverySource, /permissions\.accountReset/);
+  assert.match(recoverySource, /approvals\.length < 2/);
+  assert.match(recoverySource, /mfaCredentials[\s\S]*revokedAt/);
+  assert.match(recoverySource, /authSessions[\s\S]*revokedAt/);
+  assert.match(recoverySource, /mustChangePassword: true/);
+  assert.match(recoverySource, /mfaEnrolledAt: null/);
+});

@@ -2,7 +2,8 @@
 
 import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 
-type Account = { id: string; username: string; displayName: string; email?: string | null; status: string; mustChangePassword: boolean; mfaEnrolledAt: string | null; permissions: string[] };
+type Recovery = { id: string; reason: string; requestedAt: string; expiresAt: string; requestedBy: string; approvalCount: number; viewerApproved: boolean };
+type Account = { id: string; username: string; displayName: string; email?: string | null; status: string; mustChangePassword: boolean; mfaEnrolledAt: string | null; failedSignInCount?: number; lockedUntil?: string | null; lastSignInAt?: string | null; isCurrentUser?: boolean; recovery?: Recovery | null; permissions: string[] };
 type PermissionDefinition = { key: string; description: string; sensitive: boolean };
 type AccountModal = "create" | "permissions" | "credential" | null;
 
@@ -48,11 +49,13 @@ export default function AccountManager({ demoMode, notify }: { demoMode: boolean
   const [accounts, setAccounts] = useState<Account[]>(demoMode ? demoAccounts : []);
   const [catalog, setCatalog] = useState<PermissionDefinition[]>(demoMode ? demoPermissions : []);
   const [canManagePermissions, setCanManagePermissions] = useState(demoMode);
+  const [canResetAccounts, setCanResetAccounts] = useState(demoMode);
   const [modal, setModal] = useState<AccountModal>(null);
   const [selectedAccount, setSelectedAccount] = useState<Account | null>(null);
   const [selectedPermissions, setSelectedPermissions] = useState<string[]>([]);
+  const [accountTab, setAccountTab] = useState<"overview" | "permissions">("overview");
   const [permissionSearch, setPermissionSearch] = useState("");
-  const [credential, setCredential] = useState<{ username: string; temporaryPassword: string } | null>(null);
+  const [credential, setCredential] = useState<{ username: string; temporaryPassword: string; kind: "created" | "recovered" } | null>(null);
   const [copied, setCopied] = useState(false);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
@@ -61,11 +64,12 @@ export default function AccountManager({ demoMode, notify }: { demoMode: boolean
   const loadAccounts = useCallback(async () => {
     if (demoMode) return;
     const response = await fetch("/api/accounts");
-    const result = await responseJson<{ error?: string; accounts?: Account[]; permissionCatalog?: PermissionDefinition[]; canManagePermissions?: boolean }>(response);
+    const result = await responseJson<{ error?: string; accounts?: Account[]; permissionCatalog?: PermissionDefinition[]; canManagePermissions?: boolean; canResetAccounts?: boolean }>(response);
     if (!response.ok) throw new Error(result.error ?? "Accounts could not be loaded");
     setAccounts(result.accounts ?? []);
     setCatalog(result.permissionCatalog ?? []);
     setCanManagePermissions(Boolean(result.canManagePermissions));
+    setCanResetAccounts(Boolean(result.canResetAccounts));
   }, [demoMode]);
 
   useEffect(() => {
@@ -99,9 +103,9 @@ export default function AccountManager({ demoMode, notify }: { demoMode: boolean
   }
 
   function openPermissions(account: Account) {
-    if (!canManagePermissions) { notify("You do not have permission to change account permissions"); return; }
     setSelectedAccount(account);
     setSelectedPermissions(account.permissions);
+    setAccountTab("overview");
     setPermissionSearch("");
     setError("");
     setModal("permissions");
@@ -119,13 +123,13 @@ export default function AccountManager({ demoMode, notify }: { demoMode: boolean
         if (accounts.some((account) => account.username === username)) throw new Error("That username is already in use");
         const account: Account = { id: crypto.randomUUID(), username, displayName, email: String(form.get("email") ?? "") || null, status: "invited", mustChangePassword: true, mfaEnrolledAt: null, permissions: [] };
         setAccounts((current) => [...current, account]);
-        setCredential({ username, temporaryPassword: `Demo-${crypto.randomUUID().replaceAll("-", "").slice(0, 10)}-A7!` });
+        setCredential({ username, temporaryPassword: `Demo-${crypto.randomUUID().replaceAll("-", "").slice(0, 10)}-A7!`, kind: "created" });
         notify("Demonstration account prepared · nothing was saved");
       } else {
         const response = await fetch("/api/accounts", { method: "POST", headers: { "content-type": "application/json", "x-csrf-token": csrfToken() }, body: JSON.stringify({ username, displayName, email: form.get("email"), permissions: [] }) });
         const result = await responseJson<{ error?: string; account?: Account; temporaryPassword?: string }>(response);
         if (!response.ok || !result.account || !result.temporaryPassword) throw new Error(result.error ?? "Account could not be created");
-        setCredential({ username: result.account.username, temporaryPassword: result.temporaryPassword });
+        setCredential({ username: result.account.username, temporaryPassword: result.temporaryPassword, kind: "created" });
         await loadAccounts();
         notify("Account created");
       }
@@ -156,6 +160,73 @@ export default function AccountManager({ demoMode, notify }: { demoMode: boolean
     finally { setBusy(false); }
   }
 
+  async function performAccountAction(action: "disable" | "enable" | "unlock") {
+    if (!selectedAccount) return;
+    setError(""); setBusy(true);
+    try {
+      if (demoMode) {
+        setAccounts((current) => current.map((account) => account.id === selectedAccount.id ? {
+          ...account,
+          status: action === "disable" ? "disabled" : action === "enable" ? (account.mustChangePassword || !account.mfaEnrolledAt ? "invited" : "active") : account.status,
+          failedSignInCount: action === "unlock" || action === "enable" ? 0 : account.failedSignInCount,
+          lockedUntil: action === "unlock" || action === "enable" ? null : account.lockedUntil,
+        } : account));
+        notify(`Demonstration account ${action} completed · nothing was saved`);
+      } else {
+        const response = await fetch(`/api/accounts/${selectedAccount.id}`, { method: "PATCH", headers: { "content-type": "application/json", "x-csrf-token": csrfToken() }, body: JSON.stringify({ action }) });
+        const result = await responseJson<{ error?: string }>(response);
+        if (!response.ok) throw new Error(result.error ?? "The account could not be updated");
+        await loadAccounts();
+        notify(action === "disable" ? "Account disabled" : action === "enable" ? "Account enabled" : "Account unlocked");
+      }
+      setModal(null); setSelectedAccount(null);
+    } catch (cause) { setError(cause instanceof Error ? cause.message : "The account could not be updated"); }
+    finally { setBusy(false); }
+  }
+
+  async function startRecovery(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!selectedAccount) return;
+    const reason = String(new FormData(event.currentTarget).get("reason") ?? "").trim();
+    setError(""); setBusy(true);
+    try {
+      if (demoMode) {
+        const recovery: Recovery = { id: crypto.randomUUID(), reason, requestedAt: new Date().toISOString(), expiresAt: new Date(Date.now() + 86_400_000).toISOString(), requestedBy: "You", approvalCount: 1, viewerApproved: true };
+        setAccounts((current) => current.map((account) => account.id === selectedAccount.id ? { ...account, recovery } : account));
+        notify("Demonstration recovery started · one more approval required");
+      } else {
+        const response = await fetch(`/api/accounts/${selectedAccount.id}`, { method: "POST", headers: { "content-type": "application/json", "x-csrf-token": csrfToken() }, body: JSON.stringify({ action: "request_recovery", reason }) });
+        const result = await responseJson<{ error?: string }>(response);
+        if (!response.ok) throw new Error(result.error ?? "Account recovery could not be started");
+        await loadAccounts();
+        notify("Recovery started · one more approval required");
+      }
+      setModal(null); setSelectedAccount(null);
+    } catch (cause) { setError(cause instanceof Error ? cause.message : "Account recovery could not be started"); }
+    finally { setBusy(false); }
+  }
+
+  async function approveRecovery() {
+    if (!selectedAccount?.recovery) return;
+    setError(""); setBusy(true);
+    try {
+      if (demoMode) {
+        setCredential({ username: selectedAccount.username, temporaryPassword: `Demo-${crypto.randomUUID().replaceAll("-", "").slice(0, 10)}-R8!`, kind: "recovered" });
+        notify("Demonstration recovery approved · nothing was saved");
+      } else {
+        const response = await fetch(`/api/accounts/${selectedAccount.id}`, { method: "POST", headers: { "content-type": "application/json", "x-csrf-token": csrfToken() }, body: JSON.stringify({ action: "approve_recovery", recoveryRequestId: selectedAccount.recovery.id }) });
+        const result = await responseJson<{ error?: string; executed?: boolean; temporaryPassword?: string }>(response);
+        if (!response.ok) throw new Error(result.error ?? "Recovery approval could not be recorded");
+        if (!result.executed || !result.temporaryPassword) throw new Error("The recovery is still awaiting another approval");
+        setCredential({ username: selectedAccount.username, temporaryPassword: result.temporaryPassword, kind: "recovered" });
+        await loadAccounts();
+        notify("Recovery completed · temporary password issued");
+      }
+      setModal("credential"); setSelectedAccount(null);
+    } catch (cause) { setError(cause instanceof Error ? cause.message : "Recovery approval could not be recorded"); }
+    finally { setBusy(false); }
+  }
+
   async function copyCredential() {
     if (!credential) return;
     try {
@@ -168,13 +239,13 @@ export default function AccountManager({ demoMode, notify }: { demoMode: boolean
     <div className="management-heading account-heading"><div><p className="eyebrow coral">SECURE ACCESS</p><h2>Accounts</h2><p>Create sign-ins and control each person’s individual access to Safer Spaces.</p></div><button className="primary compact" type="button" onClick={() => { setError(""); setModal("create"); }}>Create account</button></div>
     <div className="account-overview"><div><strong>{accounts.length}</strong><span>Total accounts</span></div><div><strong>{accounts.filter((account) => account.mfaEnrolledAt).length}</strong><span>MFA enrolled</span></div><div><strong>{accounts.filter((account) => account.mustChangePassword).length}</strong><span>Awaiting first sign-in</span></div></div>
     {error && !modal && <p className="form-error" role="alert">{error}</p>}
-    <div className="account-list-heading"><div><h3>User accounts</h3><p>Select an account to review and change its permissions.</p></div>{!canManagePermissions && <span>View only</span>}</div>
-    <div className="account-list">{accounts.map((account) => { const readiness = accountReadiness(account); return <button type="button" className="account-row-card" key={account.id} onClick={() => openPermissions(account)} aria-label={`Manage permissions for ${account.displayName}`}><span className="account-avatar">{initials(account.displayName)}</span><span className="account-main"><strong>{account.displayName}</strong><small>@{account.username}{account.email ? ` · ${account.email}` : ""}</small></span><span className={`account-readiness ${readiness.tone}`}><i />{readiness.label}</span><span className="account-permission-count"><b>{account.permissions.length}</b><small>permissions</small></span><span className="account-chevron" aria-hidden="true">›</span></button>; })}{accounts.length === 0 && <div className="account-empty"><strong>No accounts yet</strong><p>Create the first additional account when you are ready.</p></div>}</div>
+    <div className="account-list-heading"><div><h3>User accounts</h3><p>Select an account to review its security, recovery and permissions.</p></div>{!canManagePermissions && !canResetAccounts && <span>Limited access</span>}</div>
+    <div className="account-list">{accounts.map((account) => { const readiness = accountReadiness(account); return <button type="button" className={`account-row-card${account.status === "disabled" ? " disabled" : ""}`} key={account.id} onClick={() => openPermissions(account)} aria-label={`Manage account for ${account.displayName}`}><span className="account-avatar">{initials(account.displayName)}</span><span className="account-main"><strong>{account.displayName}{account.isCurrentUser ? " · You" : ""}</strong><small>@{account.username}{account.email ? ` · ${account.email}` : ""}</small></span><span className={`account-readiness ${readiness.tone}`}><i />{account.status === "disabled" ? "Account disabled" : account.recovery ? `Recovery ${account.recovery.approvalCount}/2 approved` : readiness.label}</span><span className="account-permission-count"><b>{account.permissions.length}</b><small>permissions</small></span><span className="account-chevron" aria-hidden="true">›</span></button>; })}{accounts.length === 0 && <div className="account-empty"><strong>No accounts yet</strong><p>Create the first additional account when you are ready.</p></div>}</div>
 
     {modal === "create" && <div className="form-modal-backdrop account-backdrop"><section className="form-modal account-modal create-account-modal" role="dialog" aria-modal="true" aria-labelledby="create-account-title"><button className="close" type="button" aria-label="Close" onClick={closeModal}>×</button><header className="account-modal-header"><p className="eyebrow">SECURE ACCESS</p><h2 id="create-account-title" ref={modalHeadingRef} tabIndex={-1}>Create a new account</h2><p>We’ll generate a temporary password. The user must replace it and set up MFA on their first sign-in.</p></header><form className="admin-form account-modal-form" onSubmit={createAccount}><label>Username<input name="username" minLength={3} maxLength={50} pattern="[A-Za-z][A-Za-z0-9._ -]+" placeholder="e.g. Joe M" autoComplete="off" required /><small>Used to sign in. Spaces are allowed.</small></label><label>Display name<input name="displayName" maxLength={160} placeholder="Name shown in the app" autoComplete="off" required /></label><label>Email address <span className="optional">Optional</span><input name="email" type="email" placeholder="name@example.com" autoComplete="off" /></label>{error && <p className="form-error" role="alert">{error}</p>}<div className="account-modal-actions"><button className="secondary" type="button" onClick={closeModal}>Cancel</button><button className="primary" disabled={busy}>{busy ? "Creating…" : "Create secure account"}</button></div></form></section></div>}
 
-    {modal === "credential" && credential && <div className="form-modal-backdrop account-backdrop"><section className="form-modal account-modal credential-modal" role="dialog" aria-modal="true" aria-labelledby="credential-title"><button className="close" type="button" aria-label="Close" onClick={closeModal}>×</button><header className="account-modal-header success"><span className="credential-success" aria-hidden="true">✓</span><p className="eyebrow">ACCOUNT CREATED</p><h2 id="credential-title" ref={modalHeadingRef} tabIndex={-1}>Temporary sign-in details</h2><p>These details are shown only once. Send them to the user securely.</p></header><div className="credential-body"><div className="credential-field"><span>Username</span><code>{credential.username}</code></div><div className="credential-field"><span>Temporary password</span><code>{credential.temporaryPassword}</code></div>{error && <p className="form-error" role="alert">{error}</p>}<div className="credential-warning"><strong>What happens next?</strong><p>On first sign-in, the user must choose a new password and scan a QR code to set up MFA before they can access the system.</p></div><div className="account-modal-actions"><button className="secondary" type="button" onClick={() => void copyCredential()}>{copied ? "Copied ✓" : "Copy details"}</button><button className="primary" type="button" onClick={closeModal}>I’ve saved these details</button></div></div></section></div>}
+    {modal === "credential" && credential && <div className="form-modal-backdrop account-backdrop"><section className="form-modal account-modal credential-modal" role="dialog" aria-modal="true" aria-labelledby="credential-title"><button className="close" type="button" aria-label="Close" onClick={closeModal}>×</button><header className="account-modal-header success"><span className="credential-success" aria-hidden="true">✓</span><p className="eyebrow">{credential.kind === "recovered" ? "RECOVERY COMPLETED" : "ACCOUNT CREATED"}</p><h2 id="credential-title" ref={modalHeadingRef} tabIndex={-1}>Temporary sign-in details</h2><p>These details are shown only once. Send them to the user securely.</p></header><div className="credential-body"><div className="credential-field"><span>Username</span><code>{credential.username}</code></div><div className="credential-field"><span>Temporary password</span><code>{credential.temporaryPassword}</code></div>{error && <p className="form-error" role="alert">{error}</p>}<div className="credential-warning"><strong>What happens next?</strong><p>{credential.kind === "recovered" ? "All previous sessions and MFA credentials have been revoked. " : ""}On first sign-in, the user must choose a new password and scan a QR code to set up MFA before they can access the system.</p></div><div className="account-modal-actions"><button className="secondary" type="button" onClick={() => void copyCredential()}>{copied ? "Copied ✓" : "Copy details"}</button><button className="primary" type="button" onClick={closeModal}>I’ve saved these details</button></div></div></section></div>}
 
-    {modal === "permissions" && selectedAccount && <div className="form-modal-backdrop account-backdrop"><section className="form-modal account-modal permissions-modal" role="dialog" aria-modal="true" aria-labelledby="permissions-title"><button className="close" type="button" aria-label="Close" onClick={closeModal}>×</button><header className="account-modal-header"><div className="permission-account-identity"><span className="account-avatar">{initials(selectedAccount.displayName)}</span><div><p className="eyebrow">ACCOUNT PERMISSIONS</p><h2 id="permissions-title" ref={modalHeadingRef} tabIndex={-1}>{selectedAccount.displayName}</h2><span>@{selectedAccount.username}</span></div></div></header><form className="admin-form permission-modal-form" onSubmit={savePermissions}><div className="permission-picker-heading"><div><h3>Choose access</h3><p>Changes take effect when the user next refreshes or signs in.</p></div><strong aria-live="polite">{selectedPermissions.length} selected</strong></div><label className="permission-search" htmlFor="permission-search"><span>Search permissions</span><input id="permission-search" type="search" value={permissionSearch} onChange={(event) => setPermissionSearch(event.target.value)} placeholder="Search by name or description" /></label><div className="permission-choice-list">{visiblePermissions.map((permission) => { const checked = selectedPermissions.includes(permission.key); return <label className={`permission-choice${checked ? " selected" : ""}`} key={permission.key}><input type="checkbox" name="permissions" value={permission.key} checked={checked} onChange={() => setSelectedPermissions((current) => checked ? current.filter((key) => key !== permission.key) : [...current, permission.key])} /><span className="permission-choice-check" aria-hidden="true">✓</span><span><strong>{permission.key}</strong><small>{permission.description}</small></span>{permission.sensitive && <em>Sensitive</em>}</label>; })}{visiblePermissions.length === 0 && <p className="permission-empty">No permissions match that search.</p>}</div>{error && <p className="form-error" role="alert">{error}</p>}<div className="account-modal-actions"><button className="secondary" type="button" onClick={closeModal}>Cancel</button><button className="primary" disabled={busy}>{busy ? "Saving…" : `Save ${selectedPermissions.length} permissions`}</button></div></form></section></div>}
+    {modal === "permissions" && selectedAccount && <div className="form-modal-backdrop account-backdrop"><section className="form-modal account-modal permissions-modal" role="dialog" aria-modal="true" aria-labelledby="permissions-title"><button className="close" type="button" aria-label="Close" onClick={closeModal}>×</button><header className="account-modal-header"><div className="permission-account-identity"><span className="account-avatar">{initials(selectedAccount.displayName)}</span><div><p className="eyebrow">MANAGE ACCOUNT</p><h2 id="permissions-title" ref={modalHeadingRef} tabIndex={-1}>{selectedAccount.displayName}</h2><span>@{selectedAccount.username}{selectedAccount.isCurrentUser ? " · Your account" : ""}</span></div></div></header><nav className="account-detail-tabs" aria-label="Account management sections"><button type="button" className={accountTab === "overview" ? "active" : ""} onClick={() => { setAccountTab("overview"); setError(""); }}>Account & recovery</button><button type="button" className={accountTab === "permissions" ? "active" : ""} onClick={() => { setAccountTab("permissions"); setError(""); }} disabled={!canManagePermissions}>Permissions <span>{selectedAccount.permissions.length}</span></button></nav>{accountTab === "overview" ? <div className="account-detail-body"><div className="account-security-grid"><div><span>Status</span><strong className="capitalize">{selectedAccount.status}</strong></div><div><span>Last sign-in</span><strong>{selectedAccount.lastSignInAt ? new Date(selectedAccount.lastSignInAt).toLocaleString("en-GB", { day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" }) : "Never"}</strong></div><div><span>MFA</span><strong>{selectedAccount.mfaEnrolledAt ? "Enrolled" : "Not enrolled"}</strong></div><div><span>Failed sign-ins</span><strong>{selectedAccount.failedSignInCount ?? 0}</strong></div></div><section className="account-actions-card"><div><h3>Account access</h3><p>Disable access, restore an account or clear a temporary lockout.</p></div><div className="account-action-buttons">{selectedAccount.status === "disabled" ? <button className="secondary" type="button" disabled={busy} onClick={() => void performAccountAction("enable")}>Enable account</button> : <button className="danger-secondary" type="button" disabled={busy || selectedAccount.isCurrentUser} title={selectedAccount.isCurrentUser ? "You cannot disable your own account" : undefined} onClick={() => void performAccountAction("disable")}>Disable account</button>}{Boolean(selectedAccount.lockedUntil || selectedAccount.failedSignInCount) && <button className="secondary" type="button" disabled={busy} onClick={() => void performAccountAction("unlock")}>Unlock account</button>}</div></section><section className="recovery-card"><div className="recovery-card-heading"><div><p className="eyebrow coral">TWO-PERSON RECOVERY</p><h3>Password and MFA recovery</h3></div>{selectedAccount.recovery && <strong>{selectedAccount.recovery.approvalCount}/2 approved</strong>}</div>{selectedAccount.isCurrentUser ? <p className="recovery-note">For security, you cannot start or approve recovery for your own account.</p> : !canResetAccounts ? <p className="recovery-note">You do not have permission to start or approve account recovery.</p> : selectedAccount.recovery ? <div className="pending-recovery"><dl><div><dt>Requested by</dt><dd>{selectedAccount.recovery.requestedBy}</dd></div><div><dt>Reason</dt><dd>{selectedAccount.recovery.reason}</dd></div><div><dt>Expires</dt><dd>{new Date(selectedAccount.recovery.expiresAt).toLocaleString("en-GB", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" })}</dd></div></dl><button className="primary" type="button" disabled={busy || selectedAccount.recovery.viewerApproved} onClick={() => void approveRecovery()}>{selectedAccount.recovery.viewerApproved ? "Your approval is recorded" : busy ? "Approving…" : "Give second approval"}</button></div> : <form className="recovery-request-form" onSubmit={startRecovery}><label>Reason for recovery<textarea name="reason" minLength={10} maxLength={500} placeholder="Explain why this account needs to be recovered" required /></label><small>Starting recovery records your approval. A different authorised user must provide the second approval.</small><button className="primary" disabled={busy}>{busy ? "Starting…" : "Start recovery request"}</button></form>}</section>{error && <p className="form-error" role="alert">{error}</p>}<div className="account-detail-footer"><button className="secondary" type="button" onClick={closeModal}>Close</button></div></div> : <form className="admin-form permission-modal-form" onSubmit={savePermissions}><div className="permission-picker-heading"><div><h3>Choose access</h3><p>Changes take effect when the user next refreshes or signs in.</p></div><strong aria-live="polite">{selectedPermissions.length} selected</strong></div><label className="permission-search" htmlFor="permission-search"><span>Search permissions</span><input id="permission-search" type="search" value={permissionSearch} onChange={(event) => setPermissionSearch(event.target.value)} placeholder="Search by name or description" /></label><div className="permission-choice-list">{visiblePermissions.map((permission) => { const checked = selectedPermissions.includes(permission.key); return <label className={`permission-choice${checked ? " selected" : ""}`} key={permission.key}><input type="checkbox" name="permissions" value={permission.key} checked={checked} onChange={() => setSelectedPermissions((current) => checked ? current.filter((key) => key !== permission.key) : [...current, permission.key])} /><span className="permission-choice-check" aria-hidden="true">✓</span><span><strong>{permission.key}</strong><small>{permission.description}</small></span>{permission.sensitive && <em>Sensitive</em>}</label>; })}{visiblePermissions.length === 0 && <p className="permission-empty">No permissions match that search.</p>}</div>{error && <p className="form-error" role="alert">{error}</p>}<div className="account-modal-actions"><button className="secondary" type="button" onClick={closeModal}>Cancel</button><button className="primary" disabled={busy}>{busy ? "Saving…" : `Save ${selectedPermissions.length} permissions`}</button></div></form>}</section></div>}
   </section>;
 }

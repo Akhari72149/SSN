@@ -1,8 +1,8 @@
 import { randomUUID } from "node:crypto";
-import { asc, eq, inArray, sql } from "drizzle-orm";
+import { and, asc, eq, gt, inArray, sql } from "drizzle-orm";
 import { NextRequest, NextResponse } from "next/server";
 import { getDb } from "@/db";
-import { auditEvents, permissionDefinitions, userAccounts, userPermissions } from "@/db/schema";
+import { accountRecoveryApprovals, accountRecoveryRequests, auditEvents, authSessions, permissionDefinitions, userAccounts, userPermissions } from "@/db/schema";
 import { permissions } from "@/db/domain";
 import { generateTemporaryPassword, hashPassword } from "@/lib/auth/crypto";
 import { authorizeApi } from "@/lib/auth/http";
@@ -15,12 +15,34 @@ export async function GET(request: NextRequest) {
   const authorization = await authorizeApi(request, { permission: permissions.accountManage });
   if (authorization.error) return authorization.error;
   const db = getDb();
-  const [accounts, grants, catalog] = await Promise.all([
-    db.select({ id: userAccounts.id, username: userAccounts.username, displayName: userAccounts.displayName, email: userAccounts.email, status: userAccounts.status, mustChangePassword: userAccounts.mustChangePassword, mfaEnrolledAt: userAccounts.mfaEnrolledAt }).from(userAccounts).orderBy(asc(userAccounts.username)),
+  const now = new Date();
+  const [accounts, grants, catalog, sessions, recoveries, recoveryApprovals] = await Promise.all([
+    db.select({ id: userAccounts.id, username: userAccounts.username, displayName: userAccounts.displayName, email: userAccounts.email, status: userAccounts.status, mustChangePassword: userAccounts.mustChangePassword, mfaEnrolledAt: userAccounts.mfaEnrolledAt, failedSignInCount: userAccounts.failedSignInCount, lockedUntil: userAccounts.lockedUntil, updatedAt: userAccounts.updatedAt }).from(userAccounts).orderBy(asc(userAccounts.username)),
     db.select({ userId: userPermissions.userId, permissionKey: userPermissions.permissionKey }).from(userPermissions),
     db.select().from(permissionDefinitions).orderBy(asc(permissionDefinitions.key)),
+    db.select({ userId: authSessions.userId, createdAt: authSessions.createdAt }).from(authSessions).orderBy(asc(authSessions.createdAt)),
+    db.select().from(accountRecoveryRequests).where(and(inArray(accountRecoveryRequests.status, ["pending", "approved"]), gt(accountRecoveryRequests.expiresAt, now))),
+    db.select().from(accountRecoveryApprovals).where(eq(accountRecoveryApprovals.decision, "approve")),
   ]);
-  return NextResponse.json({ accounts: accounts.map((account) => ({ ...account, permissions: grants.filter((grant) => grant.userId === account.id).map((grant) => grant.permissionKey) })), permissionCatalog: hasPermission(authorization.context, permissions.permissionManage) ? catalog : [], canManagePermissions: hasPermission(authorization.context, permissions.permissionManage) }, { headers: { "cache-control": "no-store" } });
+  const accountNames = new Map(accounts.map((account) => [account.id, account.displayName]));
+  const lastSignIns = new Map<string, Date>();
+  for (const session of sessions) lastSignIns.set(session.userId, session.createdAt);
+  return NextResponse.json({
+    accounts: accounts.map((account) => {
+      const recovery = recoveries.find((item) => item.targetUserId === account.id);
+      const approvals = recovery ? recoveryApprovals.filter((item) => item.requestId === recovery.id) : [];
+      return {
+        ...account,
+        isCurrentUser: account.id === authorization.context.user.id,
+        lastSignInAt: lastSignIns.get(account.id) ?? null,
+        permissions: grants.filter((grant) => grant.userId === account.id).map((grant) => grant.permissionKey),
+        recovery: recovery ? { id: recovery.id, reason: recovery.reason, requestedAt: recovery.requestedAt, expiresAt: recovery.expiresAt, requestedBy: accountNames.get(recovery.requestedByUserId) ?? "Authorised user", approvalCount: approvals.length, viewerApproved: approvals.some((item) => item.approverUserId === authorization.context.user.id) } : null,
+      };
+    }),
+    permissionCatalog: hasPermission(authorization.context, permissions.permissionManage) ? catalog : [],
+    canManagePermissions: hasPermission(authorization.context, permissions.permissionManage),
+    canResetAccounts: hasPermission(authorization.context, permissions.accountReset),
+  }, { headers: { "cache-control": "no-store" } });
 }
 
 export async function PATCH(request: NextRequest) {
