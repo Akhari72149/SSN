@@ -43,4 +43,6 @@ test("development MFA recovery cannot target another database", async () => {
   assert.match(reset, /safer_spaces_dev/);
   assert.match(reset, /mfa_enrolled_at = null/);
   assert.match(reset, /auth\.development_mfa_reset/);
+  assert.match(reset, /update mfa_recovery_codes set used_at/);
+  assert.doesNotMatch(reset, /delete from mfa_recovery_codes/);
 });

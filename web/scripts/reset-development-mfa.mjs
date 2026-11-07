@@ -33,7 +33,7 @@ try {
 
     const now = new Date();
     await transaction`update mfa_credentials set revoked_at = coalesce(revoked_at, ${now}) where user_id = ${account.id}`;
-    await transaction`delete from mfa_recovery_codes where user_id = ${account.id}`;
+    await transaction`update mfa_recovery_codes set used_at = coalesce(used_at, ${now}) where user_id = ${account.id}`;
     await transaction`delete from auth_challenges where user_id = ${account.id}`;
     await transaction`update auth_sessions set revoked_at = coalesce(revoked_at, ${now}) where user_id = ${account.id}`;
     await transaction`
