@@ -112,6 +112,24 @@ test("shift planning provides position-based Gantt views and person search", asy
   assert.match(route, /for update/);
 });
 
+test("accounts have a dedicated page with modal creation and permission editing", async () => {
+  const dashboard = await readFile(new URL("../app/dashboard-client.tsx", import.meta.url), "utf8");
+  const manager = await readFile(new URL("../app/account-manager.tsx", import.meta.url), "utf8");
+  const route = await readFile(new URL("../app/api/accounts/route.ts", import.meta.url), "utf8");
+  assert.match(dashboard, /"Incidents", "Accounts", "More"/);
+  assert.match(dashboard, /activeNav === "Accounts"/);
+  assert.doesNotMatch(dashboard, /activeNav === "More" && <AccountManager/);
+  assert.match(manager, /Create a new account/);
+  assert.match(manager, /Temporary sign-in details/);
+  assert.match(manager, /scan a QR code to set up MFA/);
+  assert.match(manager, /permission-choice-list/);
+  assert.match(manager, /Search permissions/);
+  assert.match(route, /export async function PATCH/);
+  assert.match(route, /account\.permissions_updated/);
+  assert.match(route, /You cannot remove your own account or permission management access/);
+  assert.match(route, /for update/);
+});
+
 test("keeps authentication and live-data APIs closed in synthetic mode", async () => {
   const loginResponse = await fetch(`${origin}/api/auth/login`, {
     method: "POST",
@@ -123,6 +141,7 @@ test("keeps authentication and live-data APIs closed in synthetic mode", async (
   const eventsResponse = await fetch(`${origin}/api/events`);
   assert.equal(eventsResponse.status, 409);
   assert.equal((await fetch(`${origin}/api/accounts`)).status, 409);
+  assert.equal((await fetch(`${origin}/api/accounts`, { method: "PATCH" })).status, 409);
   assert.equal((await fetch(`${origin}/api/auth/first-login`, { method: "POST" })).status, 409);
 
   for (const resource of ["staff", "shifts", "attendance", "deployments", "equipment"]) {

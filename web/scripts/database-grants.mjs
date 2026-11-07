@@ -24,7 +24,7 @@ export function applicationGrantSql(appName = "ssn_app") {
       public.audit_events,
       public.sync_operations
     to ${appName};
-    grant delete on table public.auth_challenges to ${appName};
+    grant delete on table public.auth_challenges, public.user_permissions to ${appName};
     revoke all on table public.ssn_schema_migrations from ${appName};
     grant usage, select on all sequences in schema public to ${appName};
   `;

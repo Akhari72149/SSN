@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { asc, inArray } from "drizzle-orm";
+import { asc, eq, inArray, sql } from "drizzle-orm";
 import { NextRequest, NextResponse } from "next/server";
 import { getDb } from "@/db";
 import { auditEvents, permissionDefinitions, userAccounts, userPermissions } from "@/db/schema";
@@ -20,7 +20,47 @@ export async function GET(request: NextRequest) {
     db.select({ userId: userPermissions.userId, permissionKey: userPermissions.permissionKey }).from(userPermissions),
     db.select().from(permissionDefinitions).orderBy(asc(permissionDefinitions.key)),
   ]);
-  return NextResponse.json({ accounts: accounts.map((account) => ({ ...account, permissions: grants.filter((grant) => grant.userId === account.id).map((grant) => grant.permissionKey) })), permissionCatalog: hasPermission(authorization.context, permissions.permissionManage) ? catalog : [] }, { headers: { "cache-control": "no-store" } });
+  return NextResponse.json({ accounts: accounts.map((account) => ({ ...account, permissions: grants.filter((grant) => grant.userId === account.id).map((grant) => grant.permissionKey) })), permissionCatalog: hasPermission(authorization.context, permissions.permissionManage) ? catalog : [], canManagePermissions: hasPermission(authorization.context, permissions.permissionManage) }, { headers: { "cache-control": "no-store" } });
+}
+
+export async function PATCH(request: NextRequest) {
+  const authorization = await authorizeApi(request, { permission: permissions.permissionManage, csrf: true });
+  if (authorization.error) return authorization.error;
+  const requestId = request.headers.get("x-request-id") ?? randomUUID();
+  let body: unknown;
+  try { body = await request.json(); } catch { return NextResponse.json({ error: "Invalid request" }, { status: 400 }); }
+  const input = body as Record<string, unknown>;
+  const accountId = typeof input.accountId === "string" ? input.accountId : "";
+  const requestedPermissions = Array.isArray(input.permissions) ? [...new Set(input.permissions.filter((key): key is string => typeof key === "string"))] : [];
+  if (!/^[0-9a-f-]{36}$/i.test(accountId)) return NextResponse.json({ error: "Choose a valid account" }, { status: 400 });
+  if (accountId === authorization.context.user.id && (!requestedPermissions.includes(permissions.accountManage) || !requestedPermissions.includes(permissions.permissionManage))) {
+    return NextResponse.json({ error: "You cannot remove your own account or permission management access" }, { status: 400 });
+  }
+
+  try {
+    const updated = await getDb().transaction(async (transaction) => {
+      const targetRows = await transaction.execute<{ id: string }>(sql`select id from user_accounts where id=${accountId} for update`);
+      if (!targetRows[0]) throw new Error("account_not_found");
+      if (requestedPermissions.length) {
+        const valid = await transaction.select({ key: permissionDefinitions.key }).from(permissionDefinitions).where(inArray(permissionDefinitions.key, requestedPermissions));
+        if (valid.length !== requestedPermissions.length) throw new Error("invalid_permission");
+      }
+      const previous = await transaction.select({ key: userPermissions.permissionKey }).from(userPermissions).where(eq(userPermissions.userId, accountId));
+      await transaction.delete(userPermissions).where(eq(userPermissions.userId, accountId));
+      if (requestedPermissions.length) {
+        await transaction.insert(userPermissions).values(requestedPermissions.map((permissionKey) => ({ userId: accountId, permissionKey, grantedByUserId: authorization.context.user.id })));
+      }
+      const previousKeys = new Set(previous.map((item) => item.key));
+      await transaction.insert(auditEvents).values({ actorUserId: authorization.context.user.id, action: "account.permissions_updated", targetType: "user_account", targetOpaqueId: accountId, permitted: true, requestId, metadata: { added: requestedPermissions.filter((key) => !previousKeys.has(key)), removed: previous.map((item) => item.key).filter((key) => !requestedPermissions.includes(key)), permissionCount: requestedPermissions.length } });
+      return { accountId, permissions: requestedPermissions };
+    });
+    return NextResponse.json(updated, { headers: { "cache-control": "no-store" } });
+  } catch (cause) {
+    const code = cause instanceof Error ? cause.message : "";
+    if (code === "account_not_found") return NextResponse.json({ error: "Account not found" }, { status: 404 });
+    if (code === "invalid_permission") return NextResponse.json({ error: "One or more permissions are invalid" }, { status: 400 });
+    return NextResponse.json({ error: "Account permissions could not be updated" }, { status: 409 });
+  }
 }
 
 export async function POST(request: NextRequest) {

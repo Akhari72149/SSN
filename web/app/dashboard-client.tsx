@@ -30,7 +30,7 @@ const syntheticPeople: Person[] = [
 
 type EventOption = { id: string; label: string };
 
-const navigation = ["Dashboard", "Staff", "Shifts", "Operations", "Equipment", "Incidents", "More"];
+const navigation = ["Dashboard", "Staff", "Shifts", "Operations", "Equipment", "Incidents", "Accounts", "More"];
 
 type DashboardClientProps = {
   viewerName?: string;
@@ -122,9 +122,9 @@ export default function DashboardClient({
         {[["↗", "Signed on", String(synthetic ? 24 : signedOn), synthetic ? "+3 in the last hour" : "Current event", "coral-bg"], ["Ⅱ", "On break", String(synthetic ? 3 : onBreak), synthetic ? "2 due back soon" : "Current event", "amber-bg"], ["⌖", "Deployed", String(synthetic ? 19 : deployed), synthetic ? "Across 8 locations" : "Active assignments", "blue-bg"], ["!", "Kit outstanding", String(synthetic ? 7 : kitOutstanding), synthetic ? "2 overdue returns" : "Currently issued", "red-bg"]].map((metric, index) => <article key={metric[1]}><span className={`metric-icon ${metric[4]}`}>{metric[0]}</span><div><small>{metric[1]}</small><strong>{metric[2]}</strong><p className={index === 3 ? "urgent" : ""}>{metric[3]}</p></div></article>)}
       </section></>}
       {activeNav !== "Dashboard" && synthetic && <p className="demo-banner">Demonstration preview · explore every section safely; changes are not saved</p>}
-      {activeNav === "More" && <AccountManager demoMode={synthetic} notify={setNotice} />}
+      {activeNav === "Accounts" && <AccountManager demoMode={synthetic} notify={setNotice} />}
       {activeNav === "Shifts" && <ShiftPlanner eventId={event} staff={team.map(({ id, name }) => ({ id, name }))} demoMode={synthetic} notify={setNotice} />}
-      {activeNav !== "Dashboard" && activeNav !== "Shifts" && <OperationsManager section={activeNav} eventId={event} events={eventOptions} staff={team} demoMode={synthetic} onEventsChanged={() => void loadEvents()} onStaffCreated={() => void loadStaff()} notify={setNotice} />}
+      {activeNav !== "Dashboard" && activeNav !== "Shifts" && activeNav !== "Accounts" && <OperationsManager section={activeNav} eventId={event} events={eventOptions} staff={team} demoMode={synthetic} onEventsChanged={() => void loadEvents()} onStaffCreated={() => void loadStaff()} notify={setNotice} />}
 
       {activeNav === "Dashboard" && <section className="workspace-grid">
         <div className="panel staff-panel">
