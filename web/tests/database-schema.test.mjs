@@ -6,6 +6,7 @@ const migrationUrl = new URL("../drizzle/0001_secure_foundation.sql", import.met
 const authMigrationUrl = new URL("../drizzle/0002_authentication_runtime.sql", import.meta.url);
 const usernameMigrationUrl = new URL("../drizzle/0003_username_authentication.sql", import.meta.url);
 const firstLoginMigrationUrl = new URL("../drizzle/0004_first_login_accounts.sql", import.meta.url);
+const ganttMigrationUrl = new URL("../drizzle/0005_positions_and_gantt.sql", import.meta.url);
 
 test("secure foundation migration contains the agreed operational domains", async () => {
   const sql = await readFile(migrationUrl, "utf8");
@@ -54,6 +55,15 @@ test("new accounts must replace temporary passwords without changing existing ac
   assert.match(sql, /auth_challenge_purpose/i);
   assert.match(sql, /must_change_password" boolean DEFAULT false NOT NULL/i);
   assert.match(sql, /must_change_password" SET DEFAULT true/i);
+});
+
+test("Gantt scheduling links indexed positions and event date ranges", async () => {
+  const sql = await readFile(ganttMigrationUrl, "utf8");
+  assert.match(sql, /CREATE TABLE positions/i);
+  assert.match(sql, /position_event_name_unique/i);
+  assert.match(sql, /ADD COLUMN position_id/i);
+  assert.match(sql, /shift_position_starts_idx/i);
+  assert.match(sql, /shift_event_range_idx/i);
 });
 
 test("database access remains server-side and health failures do not leak details", async () => {

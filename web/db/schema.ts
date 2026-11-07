@@ -192,9 +192,21 @@ export const staff = pgTable("staff", {
   check("staff_row_version_positive", sql`${table.rowVersion} > 0`),
 ]);
 
+export const positions = pgTable("positions", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  eventId: uuid("event_id").notNull().references(() => events.id, { onDelete: "restrict" }),
+  name: text("name").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+}, (table) => [
+  uniqueIndex("position_event_name_unique").on(table.eventId, sql`lower(${table.name})`),
+  index("position_event_idx").on(table.eventId),
+  check("position_name_length", sql`length(trim(${table.name})) BETWEEN 1 AND 120`),
+]);
+
 export const shifts = pgTable("shifts", {
   id: uuid("id").primaryKey().defaultRandom(),
   eventId: uuid("event_id").notNull().references(() => events.id, { onDelete: "restrict" }),
+  positionId: uuid("position_id").references(() => positions.id, { onDelete: "restrict" }),
   name: text("name").notNull(),
   status: shiftStatus("status").notNull().default("planned"),
   startsAt: timestamp("starts_at", { withTimezone: true }).notNull(),
@@ -203,6 +215,8 @@ export const shifts = pgTable("shifts", {
   flagReason: text("flag_reason"),
 }, (table) => [
   index("shift_event_starts_idx").on(table.eventId, table.startsAt),
+  index("shift_position_starts_idx").on(table.positionId, table.startsAt),
+  index("shift_event_range_idx").on(table.eventId, table.startsAt, table.endsAt),
   check("shift_time_order", sql`${table.endsAt} > ${table.startsAt}`),
   check("shift_flag_consistency", sql`(${table.flaggedAt} IS NULL) = (${table.flagReason} IS NULL)`),
 ]);

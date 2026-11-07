@@ -131,6 +131,7 @@ ownerPsql(`
     public.account_recovery_approvals,
     public.events,
     public.staff,
+    public.positions,
     public.shifts,
     public.shift_assignments,
     public.attendance_events,

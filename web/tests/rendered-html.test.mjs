@@ -85,6 +85,19 @@ test("equipment has its own page and only radios request an item code", async ()
   assert.match(route, /type === "radio" \? requestedItemCode : `internal-/);
 });
 
+test("shift planning provides position-based Gantt views and person search", async () => {
+  const dashboard = await readFile(new URL("../app/dashboard-client.tsx", import.meta.url), "utf8");
+  const planner = await readFile(new URL("../app/shift-planner.tsx", import.meta.url), "utf8");
+  const route = await readFile(new URL("../app/api/events/[eventId]/shifts/route.ts", import.meta.url), "utf8");
+  assert.match(dashboard, /"Staff", "Shifts", "Operations"/);
+  assert.match(planner, /Gantt schedule/);
+  for (const view of ["One day", "Entire event", "Date range", "Search person"]) assert.match(planner, new RegExp(view));
+  assert.match(planner, /create_position/);
+  assert.match(planner, /positionId/);
+  assert.match(route, /innerJoin\(staff/);
+  assert.match(route, /shift\.assignments\.some/);
+});
+
 test("keeps authentication and live-data APIs closed in synthetic mode", async () => {
   const loginResponse = await fetch(`${origin}/api/auth/login`, {
     method: "POST",

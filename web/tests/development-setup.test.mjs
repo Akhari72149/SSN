@@ -9,6 +9,7 @@ test("development setup uses local PostgreSQL without Docker", async () => {
   assert.match(setup, /findPsql/);
   assert.match(setup, /APP_DATA_MODE", "live"/);
   assert.match(setup, /ssn_schema_migrations/);
+  assert.match(setup, /public\.positions/);
   assert.match(setup, /requiredPostgresMajor = 16/);
   assert.match(setup, /show server_version_num/);
   assert.doesNotMatch(setup, /docker/i);

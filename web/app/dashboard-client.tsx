@@ -6,6 +6,7 @@ import { InstallApp, NetworkStatus } from "./pwa";
 import LogoutButton from "./logout-button";
 import OperationsManager from "./operations-manager";
 import AccountManager from "./account-manager";
+import ShiftPlanner from "./shift-planner";
 
 type Person = {
   id: string;
@@ -29,7 +30,7 @@ const syntheticPeople: Person[] = [
 
 type EventOption = { id: string; label: string };
 
-const navigation = ["Dashboard", "Staff", "Operations", "Equipment", "Incidents", "More"];
+const navigation = ["Dashboard", "Staff", "Shifts", "Operations", "Equipment", "Incidents", "More"];
 
 type DashboardClientProps = {
   viewerName?: string;
@@ -122,7 +123,8 @@ export default function DashboardClient({
       </section></>}
       {activeNav !== "Dashboard" && synthetic && <p className="demo-banner">Demonstration preview · explore every section safely; changes are not saved</p>}
       {activeNav === "More" && <AccountManager demoMode={synthetic} notify={setNotice} />}
-      {activeNav !== "Dashboard" && <OperationsManager section={activeNav} eventId={event} events={eventOptions} staff={team} demoMode={synthetic} onEventsChanged={() => void loadEvents()} onStaffCreated={() => void loadStaff()} notify={setNotice} />}
+      {activeNav === "Shifts" && <ShiftPlanner eventId={event} staff={team.map(({ id, name }) => ({ id, name }))} demoMode={synthetic} notify={setNotice} />}
+      {activeNav !== "Dashboard" && activeNav !== "Shifts" && <OperationsManager section={activeNav} eventId={event} events={eventOptions} staff={team} demoMode={synthetic} onEventsChanged={() => void loadEvents()} onStaffCreated={() => void loadStaff()} notify={setNotice} />}
 
       {activeNav === "Dashboard" && <section className="workspace-grid">
         <div className="panel staff-panel">
