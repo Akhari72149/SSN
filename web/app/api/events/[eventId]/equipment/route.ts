@@ -34,12 +34,13 @@ export async function POST(request: NextRequest, context: { params: Promise<{ ev
   const db = getDb();
 
   if (action === "create") {
-    const itemCode = typeof input.itemCode === "string" ? input.itemCode.trim() : "";
+    const requestedItemCode = typeof input.itemCode === "string" ? input.itemCode.trim() : "";
     const type = typeof input.type === "string" && itemTypes.has(input.type) ? input.type as "radio" | "earpiece" | "tshirt" | "jumper" | "tracker" | "other" : null;
+    const itemCode = type === "radio" ? requestedItemCode : `internal-${randomUUID()}`;
     const colour = input.colour === "black" || input.colour === "pink" || input.colour === "other" ? input.colour : null;
     const size = typeof input.size === "string" && sizes.has(input.size) ? input.size as "S" | "M" | "L" | "XL" | "XXL" : null;
-    if (!itemCode || itemCode.length > 80 || !type || ((type === "tshirt" || type === "jumper") && !size) || (type === "tshirt" && colour !== "black" && colour !== "pink")) {
-      return NextResponse.json({ error: "Enter a valid item code, type, colour and size" }, { status: 400 });
+    if (!type || (type === "radio" && (!itemCode || itemCode.length > 80)) || ((type === "tshirt" || type === "jumper") && !size) || (type === "tshirt" && colour !== "black" && colour !== "pink")) {
+      return NextResponse.json({ error: "Enter the required radio code, type, colour and size" }, { status: 400 });
     }
     try {
       const created = await db.transaction(async (transaction) => {
@@ -48,7 +49,7 @@ export async function POST(request: NextRequest, context: { params: Promise<{ ev
         return record;
       });
       return NextResponse.json({ equipment: created }, { status: 201 });
-    } catch { return NextResponse.json({ error: "Item code already exists or the event is invalid" }, { status: 409 }); }
+    } catch { return NextResponse.json({ error: type === "radio" ? "Radio item code already exists or the event is invalid" : "The equipment could not be added" }, { status: 409 }); }
   }
 
   if (action === "issue") {

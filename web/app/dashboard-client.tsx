@@ -29,7 +29,7 @@ const syntheticPeople: Person[] = [
 
 type EventOption = { id: string; label: string };
 
-const navigation = ["Dashboard", "Staff", "Operations", "Incidents", "More"];
+const navigation = ["Dashboard", "Staff", "Operations", "Equipment", "Incidents", "More"];
 
 type DashboardClientProps = {
   viewerName?: string;
@@ -63,7 +63,7 @@ export default function DashboardClient({
   const unassigned = team.filter((person) => person.deployment === "Unassigned").length;
   const quickAction = (action: string) => {
     setNotice(synthetic ? `${action} opened · demonstration only` : `${action} workflow ready`);
-    setActiveNav("Operations");
+    setActiveNav(action === "Issue kit" || action === "Overdue equipment" ? "Equipment" : "Operations");
   };
 
   const loadEvents = useCallback(async () => {

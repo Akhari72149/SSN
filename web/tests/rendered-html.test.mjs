@@ -75,6 +75,16 @@ test("operation forms keep their form reference across asynchronous submissions"
   assert.doesNotMatch(manager, /await api[\s\S]*event\.currentTarget\.reset\(\)/);
 });
 
+test("equipment has its own page and only radios request an item code", async () => {
+  const dashboard = await readFile(new URL("../app/dashboard-client.tsx", import.meta.url), "utf8");
+  const manager = await readFile(new URL("../app/operations-manager.tsx", import.meta.url), "utf8");
+  const route = await readFile(new URL("../app/api/events/[eventId]/equipment/route.ts", import.meta.url), "utf8");
+  assert.match(dashboard, /"Operations", "Equipment", "Incidents"/);
+  assert.match(manager, /section === "Equipment"/);
+  assert.match(manager, /equipmentType === "radio"[\s\S]*Radio item code/);
+  assert.match(route, /type === "radio" \? requestedItemCode : `internal-/);
+});
+
 test("keeps authentication and live-data APIs closed in synthetic mode", async () => {
   const loginResponse = await fetch(`${origin}/api/auth/login`, {
     method: "POST",
