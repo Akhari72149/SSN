@@ -22,6 +22,20 @@ export const permissions = {
 
 export type Permission = (typeof permissions)[keyof typeof permissions];
 
+export const staffRoles = [
+  "Volunteer",
+  "Volunteer Champion",
+  "Supervisor",
+  "Deputy",
+  "Manager",
+] as const;
+
+export type StaffRole = (typeof staffRoles)[number];
+
+export function isStaffRole(value: unknown): value is StaffRole {
+  return typeof value === "string" && staffRoles.some((role) => role === value);
+}
+
 export const permissionCatalog: ReadonlyArray<{
   key: Permission;
   description: string;

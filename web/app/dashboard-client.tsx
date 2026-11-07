@@ -21,10 +21,10 @@ type Person = {
 
 const syntheticPeople: Person[] = [
   { id: "1", name: "Alex Morgan", legalName: "Alexandra Morgan", role: "Supervisor", staffType: "Paid", shift: "12:00–20:00", state: "Signed on", deployment: "Welfare tent · Response lead", equipment: "Radio 12 · Earpiece 12 · Black T-shirt M" },
-  { id: "2", name: "Jamie Patel", legalName: "Jamie Patel", role: "Responder", staffType: "Paid", shift: "14:00–22:00", state: "On break", deployment: "East gate", equipment: "Radio 08 · Earpiece 08 · Pink T-shirt L" },
-  { id: "3", name: "Morgan Ellis", legalName: "Morgan Ellis", role: "Responder", staffType: "Volunteer", shift: "16:00–00:00", state: "Planned", deployment: "Unassigned", equipment: "Pink T-shirt S" },
-  { id: "4", name: "Taylor Reed", legalName: "Taylor Reed", role: "Responder", staffType: "Paid", shift: "12:00–20:00", state: "Signed on", deployment: "Main stage · Welfare patrol", equipment: "Radio 17 · Earpiece 17 · Jumper XL" },
-  { id: "5", name: "Sam Williams", legalName: "Samuel Williams", role: "Responder", staffType: "Volunteer", shift: "10:00–18:00", state: "Did not attend", deployment: "Unassigned", equipment: "None" },
+  { id: "2", name: "Jamie Patel", legalName: "Jamie Patel", role: "Volunteer Champion", staffType: "Paid", shift: "14:00–22:00", state: "On break", deployment: "East gate", equipment: "Radio 08 · Earpiece 08 · Pink T-shirt L" },
+  { id: "3", name: "Morgan Ellis", legalName: "Morgan Ellis", role: "Volunteer", staffType: "Volunteer", shift: "16:00–00:00", state: "Planned", deployment: "Unassigned", equipment: "Pink T-shirt S" },
+  { id: "4", name: "Taylor Reed", legalName: "Taylor Reed", role: "Deputy", staffType: "Paid", shift: "12:00–20:00", state: "Signed on", deployment: "Main stage · Welfare patrol", equipment: "Radio 17 · Earpiece 17 · Jumper XL" },
+  { id: "5", name: "Sam Williams", legalName: "Samuel Williams", role: "Manager", staffType: "Volunteer", shift: "10:00–18:00", state: "Did not attend", deployment: "Unassigned", equipment: "None" },
 ];
 
 type EventOption = { id: string; label: string };

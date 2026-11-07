@@ -3,7 +3,7 @@ import { and, asc, desc, eq, ilike, isNull, max, or, sql } from "drizzle-orm";
 import { NextRequest, NextResponse } from "next/server";
 import { getDb } from "@/db";
 import { attendanceEvents, auditEvents, deployments, equipmentAllocations, equipmentItems, shiftAssignments, shifts, staff } from "@/db/schema";
-import { formatStaffCode, permissions } from "@/db/domain";
+import { formatStaffCode, isStaffRole, permissions } from "@/db/domain";
 import { authorizeApi } from "@/lib/auth/http";
 
 export const runtime = "nodejs";
@@ -52,10 +52,10 @@ export async function POST(request: NextRequest, context: { params: Promise<{ ev
   const input = body as Record<string, unknown>;
   const legalName = typeof input.legalName === "string" ? input.legalName.trim() : "";
   const preferredName = typeof input.preferredName === "string" ? input.preferredName.trim() : "";
-  const roleLabel = typeof input.roleLabel === "string" ? input.roleLabel.trim() : null;
+  const roleLabel = typeof input.roleLabel === "string" ? input.roleLabel.trim() : "";
   const type = input.staffType === "paid" || input.staffType === "volunteer" ? input.staffType : null;
-  if (!legalName || !preferredName || !type || legalName.length > 160 || preferredName.length > 160 || (roleLabel?.length ?? 0) > 120) {
-    return NextResponse.json({ error: "Legal name, preferred name and staff type are required" }, { status: 400 });
+  if (!legalName || !preferredName || !type || !isStaffRole(roleLabel) || legalName.length > 160 || preferredName.length > 160) {
+    return NextResponse.json({ error: "Legal name, preferred name, role and staff type are required" }, { status: 400 });
   }
 
   const db = getDb();

@@ -3,8 +3,10 @@ import test from "node:test";
 import {
   canExecutePrivilegedRecovery,
   formatStaffCode,
+  isStaffRole,
   permissionCatalog,
   permissions,
+  staffRoles,
   validateEventCode,
 } from "../db/domain.ts";
 
@@ -28,4 +30,11 @@ test("permission catalog contains unique individual grants", () => {
   assert.equal(new Set(keys).size, keys.length);
   assert.ok(keys.includes(permissions.accountReset));
   assert.ok(keys.includes(permissions.reportPayroll));
+});
+
+test("staff roles are limited to the agreed operational list", () => {
+  assert.deepEqual(staffRoles, ["Volunteer", "Volunteer Champion", "Supervisor", "Deputy", "Manager"]);
+  for (const role of staffRoles) assert.equal(isStaffRole(role), true);
+  assert.equal(isStaffRole("Responder"), false);
+  assert.equal(isStaffRole("manager"), false);
 });
