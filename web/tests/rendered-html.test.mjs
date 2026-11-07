@@ -68,6 +68,13 @@ test("the first-login client includes local QR enrolment", async () => {
   assert.doesNotMatch(setup, /api\.qrserver|chart\.googleapis/);
 });
 
+test("operation forms keep their form reference across asynchronous submissions", async () => {
+  const manager = await readFile(new URL("../app/operations-manager.tsx", import.meta.url), "utf8");
+  assert.match(manager, /const form = event\.currentTarget;/);
+  assert.match(manager, /await api[\s\S]*form\.reset\(\)/);
+  assert.doesNotMatch(manager, /await api[\s\S]*event\.currentTarget\.reset\(\)/);
+});
+
 test("keeps authentication and live-data APIs closed in synthetic mode", async () => {
   const loginResponse = await fetch(`${origin}/api/auth/login`, {
     method: "POST",

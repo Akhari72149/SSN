@@ -77,6 +77,7 @@ export default function OperationsManager({ section, eventId, events, staff, dem
 
   async function submitForm(event: FormEvent<HTMLFormElement>, url: string, values: Record<string, unknown>, success: string, after?: () => void) {
     event.preventDefault();
+    const form = event.currentTarget;
     if (demoMode) {
       notify(`${success} · demonstration only, nothing was saved`);
       return;
@@ -84,7 +85,7 @@ export default function OperationsManager({ section, eventId, events, staff, dem
     setBusy(true); setError("");
     try {
       await api(url, { method: "POST", body: JSON.stringify(values) });
-      event.currentTarget.reset();
+      form.reset();
       notify(success);
       after?.();
       await refresh();
