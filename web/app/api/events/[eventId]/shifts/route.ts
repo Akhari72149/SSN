@@ -84,9 +84,11 @@ export async function POST(request: NextRequest, context: { params: Promise<{ ev
   const startsAt = typeof input.startsAt === "string" ? new Date(input.startsAt) : new Date(Number.NaN);
   const endsAt = typeof input.endsAt === "string" ? new Date(input.endsAt) : new Date(Number.NaN);
   const staffIds = Array.isArray(input.staffIds) ? [...new Set(input.staffIds.filter((id): id is string => typeof id === "string"))] : [];
-  if (!name || name.length > 120 || !positionId || Number.isNaN(startsAt.valueOf()) || Number.isNaN(endsAt.valueOf()) || endsAt <= startsAt) {
-    return NextResponse.json({ error: "Position, shift name and a valid date range are required" }, { status: 400 });
+  const quantity = typeof input.quantity === "number" && Number.isInteger(input.quantity) ? input.quantity : Number(input.quantity ?? 1);
+  if (!name || name.length > 120 || !positionId || Number.isNaN(startsAt.valueOf()) || Number.isNaN(endsAt.valueOf()) || endsAt <= startsAt || !Number.isInteger(quantity) || quantity < 1 || quantity > 50) {
+    return NextResponse.json({ error: "Position, shift name, quantity from 1 to 50 and a valid date range are required" }, { status: 400 });
   }
+  if (quantity > 1 && staffIds.length > quantity) return NextResponse.json({ error: "For multiple shift slots, select no more people than the number of shifts" }, { status: 400 });
 
   try {
     const created = await getDb().transaction(async (transaction) => {
@@ -99,12 +101,17 @@ export async function POST(request: NextRequest, context: { params: Promise<{ ev
         const validStaff = await transaction.select({ id: staff.id }).from(staff).where(and(eq(staff.eventId, eventId), inArray(staff.id, staffIds)));
         if (validStaff.length !== staffIds.length) throw new Error("invalid_staff");
       }
-      const [shift] = await transaction.insert(shifts).values({ eventId, positionId, name, startsAt, endsAt }).returning();
-      if (staffIds.length) await transaction.insert(shiftAssignments).values(staffIds.map((staffId) => ({ shiftId: shift.id, staffId })));
-      await transaction.insert(auditEvents).values({ actorUserId: authorization.context.user.id, action: "shift.created", targetType: "shift", targetOpaqueId: shift.id, permitted: true, requestId, metadata: { eventId, positionId, assignedStaff: staffIds.length } });
-      return { ...shift, positionName: position.name, staffIds };
+      const createdShifts = await transaction.insert(shifts).values(Array.from({ length: quantity }, (_, index) => ({ eventId, positionId, name: quantity === 1 ? name : `${name} ${index + 1}`, startsAt, endsAt }))).returning();
+      if (staffIds.length) {
+        const assignments = quantity === 1
+          ? staffIds.map((staffId) => ({ shiftId: createdShifts[0].id, staffId }))
+          : staffIds.map((staffId, index) => ({ shiftId: createdShifts[index].id, staffId }));
+        await transaction.insert(shiftAssignments).values(assignments);
+      }
+      await transaction.insert(auditEvents).values(createdShifts.map((shift) => ({ actorUserId: authorization.context.user.id, action: "shift.created", targetType: "shift", targetOpaqueId: shift.id, permitted: true, requestId, metadata: { eventId, positionId, batchQuantity: quantity, assignedStaff: staffIds.length } })));
+      return createdShifts.map((shift, index) => ({ ...shift, positionName: position.name, staffIds: quantity === 1 ? staffIds : staffIds[index] ? [staffIds[index]] : [] }));
     });
-    return NextResponse.json({ shift: created }, { status: 201 });
+    return NextResponse.json({ shifts: created }, { status: 201 });
   } catch (cause) {
     const code = cause instanceof Error ? cause.message : "";
     if (code === "event_not_found") return NextResponse.json({ error: "Event not found" }, { status: 404 });

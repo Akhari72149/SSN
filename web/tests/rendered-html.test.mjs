@@ -94,8 +94,13 @@ test("shift planning provides position-based Gantt views and person search", asy
   for (const view of ["One day", "Entire event", "Date range", "Search person"]) assert.match(planner, new RegExp(view));
   assert.match(planner, /create_position/);
   assert.match(planner, /positionId/);
+  assert.match(planner, /form-modal-backdrop/);
+  assert.match(planner, /Number of shifts/);
+  assert.match(planner, /scheduling database update is not installed/i);
   assert.match(route, /innerJoin\(staff/);
   assert.match(route, /shift\.assignments\.some/);
+  assert.match(route, /length: quantity/);
+  assert.match(route, /batchQuantity: quantity/);
 });
 
 test("keeps authentication and live-data APIs closed in synthetic mode", async () => {
